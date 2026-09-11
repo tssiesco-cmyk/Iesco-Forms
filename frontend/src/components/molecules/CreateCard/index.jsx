@@ -39,11 +39,16 @@ const Label = styled.span`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
-function CreateCard({ label = "Crear nuevo", to }) {
+function CreateCard({ label = "Crear nuevo", to, onClick }) {
   const navigate = useNavigate();
 
+  const handleClick = () => {
+    if (onClick) onClick();
+    else if (to) navigate(to);
+  };
+
   return (
-    <Card onClick={() => to && navigate(to)}>
+    <Card onClick={handleClick}>
       <PlusCircle>
         <FiPlus size={22} />
       </PlusCircle>

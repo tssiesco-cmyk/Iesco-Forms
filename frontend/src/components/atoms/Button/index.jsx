@@ -35,7 +35,7 @@ const variants = {
 
     &:hover {
       background: ${({ theme }) => theme.colors.danger};
-      color: white;
+      color: ${({ theme }) => theme.colors.textInverse};
     }
   `,
 };
@@ -67,6 +67,12 @@ const Button = styled.button`
   white-space: nowrap;
   ${({ $size = "md" }) => sizes[$size]}
   ${({ $variant = "primary" }) => variants[$variant]}
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
 `;
 
 export default Button;

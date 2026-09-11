@@ -1,3 +1,4 @@
+import { useState } from "react";
 import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,7 +9,10 @@ import { useForms } from "../../context/FormContext";
 import StatCard from "../../components/molecules/StatCard";
 import FormCard from "../../components/molecules/FormCard";
 import CreateCard from "../../components/molecules/CreateCard";
+import SkeletonCard from "../../components/molecules/SkeletonCard";
+import { ErrorState, Skeleton } from "../../components/molecules/StateView";
 import Button from "../../components/atoms/Button";
+import Spinner from "../../components/atoms/Spinner";
 
 const Welcome = styled.section`
   margin-bottom: ${({ theme }) => theme.spacing["4xl"]};
@@ -29,14 +33,15 @@ const WelcomeText = styled.p`
 `;
 
 const QuickAction = styled.div`
-  background: linear-gradient(135deg, #6542F4 0%, #9B7DFF 100%);
+  background: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.radii.lg};
   padding: 28px 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: ${({ theme }) => theme.spacing["4xl"]};
-  color: white;
+  color: ${({ theme }) => theme.colors.text};
 `;
 
 const QuickActionText = styled.div`
@@ -48,16 +53,9 @@ const QuickActionText = styled.div`
 
   p {
     font-size: ${({ theme }) => theme.fontSizes.base};
-    opacity: 0.85;
+    color: ${({ theme }) => theme.colors.textSecondary};
     margin: 0;
   }
-`;
-
-const WhiteButton = styled(Button)`
-  background: white;
-  color: ${({ theme }) => theme.colors.primary};
-  font-weight: ${({ theme }) => theme.fontWeights.semibold};
-  &:hover { background: #f0f0f0; }
 `;
 
 const Section = styled.section`
@@ -106,24 +104,30 @@ const CardsGrid = styled.div`
   }
 `;
 
-const gradients = [
-  "linear-gradient(135deg, #6542F4 0%, #9B7DFF 100%)",
-  "linear-gradient(135deg, #8B5CF6 0%, #C4B5FD 100%)",
-  "linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)",
-];
-
 function Home() {
   const navigate = useNavigate();
-  const { forms, createForm } = useForms();
+  const { forms, status, error, reload, createForm } = useForms();
+  const [creating, setCreating] = useState(false);
 
-  const totalResponses = forms.reduce((sum, f) => sum + f.responses, 0);
+  const loading = status === "loading";
+
+  const totalResponses = forms.reduce((sum, f) => sum + (f.responseCount ?? 0), 0);
   const activeForms = forms.filter((f) => f.status === "Activo").length;
   const recentForms = forms.slice(0, 3);
 
-  const handleQuickCreate = () => {
-    const newId = createForm("Formulario sin titulo");
-    navigate(`/formularios/${newId}/editar`);
+  const handleQuickCreate = async () => {
+    if (creating) return;
+
+    setCreating(true);
+    const newId = await createForm("Formulario sin titulo");
+    setCreating(false);
+
+    if (newId) navigate(`/formularios/${newId}/editar`);
   };
+
+  // Mientras cargan los datos las cifras muestran un bloque gris en vez de un
+  // cero que luego salta a otro numero.
+  const stat = (value) => (loading ? <Skeleton $width="48px" $height="24px" /> : value);
 
   return (
     <>
@@ -137,9 +141,10 @@ function Home() {
           <h3>Crea un nuevo formulario</h3>
           <p>Empieza desde cero o usa una plantilla para ir mas rapido.</p>
         </QuickActionText>
-        <WhiteButton onClick={handleQuickCreate}>
-          <FiPlus size={16} /> Crear formulario
-        </WhiteButton>
+        <Button onClick={handleQuickCreate} disabled={creating}>
+          {creating ? <Spinner $size={14} $color="currentColor" /> : <FiPlus size={16} />}
+          {creating ? "Creando..." : "Crear formulario"}
+        </Button>
       </QuickAction>
 
       <Section>
@@ -147,10 +152,10 @@ function Home() {
           <SectionTitle>Resumen</SectionTitle>
         </SectionHeader>
         <StatsGrid>
-          <StatCard icon={<FiEdit3 size={16} />} label="Formularios" number={forms.length} />
-          <StatCard icon={<FiMessageSquare size={16} />} label="Respuestas totales" number={totalResponses} iconBg="#EAFAF3" iconColor="#2DB87F" />
-          <StatCard icon={<FiTrendingUp size={16} />} label="Formularios activos" number={activeForms} iconBg="#FFF8EC" iconColor="#F5A623" />
-          <StatCard icon={<FiUsers size={16} />} label="Compartidos" number="0" iconBg="#FEF0F0" iconColor="#E34850" />
+          <StatCard icon={<FiEdit3 size={16} />} label="Formularios" number={stat(forms.length)} />
+          <StatCard icon={<FiMessageSquare size={16} />} label="Respuestas totales" number={stat(totalResponses)} tone="success" />
+          <StatCard icon={<FiTrendingUp size={16} />} label="Formularios activos" number={stat(activeForms)} tone="warning" />
+          <StatCard icon={<FiUsers size={16} />} label="Compartidos" number={stat(0)} tone="danger" />
         </StatsGrid>
       </Section>
 
@@ -161,21 +166,26 @@ function Home() {
             Ver todos <FiArrowRight size={14} />
           </Button>
         </SectionHeader>
-        <CardsGrid>
-          <CreateCard label="Nuevo formulario" to="/formularios" />
-          {recentForms.map((form, i) => (
-            <FormCard
-              key={form.id}
-              icon={<FiEdit3 size={24} />}
-              title={form.title}
-              date={`${form.responses} respuestas`}
-              responses={form.responses}
-              status={form.status}
-              color={gradients[i % gradients.length]}
-              onClick={() => navigate(`/formularios/${form.id}/editar`)}
-            />
-          ))}
-        </CardsGrid>
+        {status === "error" ? (
+          <ErrorState error={error} onRetry={reload} compact />
+        ) : (
+          <CardsGrid>
+            <CreateCard label="Nuevo formulario" to="/formularios" />
+            {loading
+              ? Array.from({ length: 3 }, (_, i) => <SkeletonCard key={i} />)
+              : recentForms.map((form) => (
+                  <FormCard
+                    key={form.id}
+                    icon={<FiEdit3 size={24} />}
+                    title={form.title}
+                    date={form.status === "Borrador" ? "Borrador" : form.createdAt}
+                    responses={form.responseCount ?? 0}
+                    status={form.status}
+                    onClick={() => navigate(`/formularios/${form.id}/editar`)}
+                  />
+                ))}
+          </CardsGrid>
+        )}
       </Section>
     </>
   );

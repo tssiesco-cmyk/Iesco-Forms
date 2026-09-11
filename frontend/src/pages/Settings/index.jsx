@@ -1,7 +1,9 @@
 import styled from "styled-components";
-import { FiUser, FiMail, FiSun } from "react-icons/fi";
+import { FiUser, FiMail, FiSun, FiMoon, FiShield, FiLogOut } from "react-icons/fi";
 import Avatar from "../../components/atoms/Avatar";
 import Button from "../../components/atoms/Button";
+import { useThemeMode } from "../../context/ThemeContext";
+import { useAuth } from "../../context/AuthContext";
 
 const Page = styled.div`
   max-width: 720px;
@@ -96,10 +98,15 @@ const OptionText = styled.div`
 `;
 
 function Settings() {
+  const { mode, toggleMode } = useThemeMode();
+  const { user, logout } = useAuth();
+  const isDark = mode === "dark";
+  const initial = (user?.displayName ?? "?")[0].toUpperCase();
+
   return (
     <Page>
       <Header>
-        <Avatar $size={56}>A</Avatar>
+        <Avatar $size={56}>{initial}</Avatar>
         <HeaderInfo>
           <h1>Configuracion</h1>
           <p>Administra las preferencias de tu cuenta.</p>
@@ -113,7 +120,7 @@ function Settings() {
             <OptionIcon><FiUser size={16} /></OptionIcon>
             <OptionText>
               <strong>Nombre</strong>
-              <span>Adriano Velasquez</span>
+              <span>{user?.displayName ?? "-"}</span>
             </OptionText>
           </OptionInfo>
           <Button $variant="secondary" $size="sm">Editar</Button>
@@ -123,10 +130,19 @@ function Settings() {
             <OptionIcon><FiMail size={16} /></OptionIcon>
             <OptionText>
               <strong>Correo electronico</strong>
-              <span>adrianovelasquez@iescogroup.com</span>
+              <span>{user?.email ?? "-"}</span>
             </OptionText>
           </OptionInfo>
           <Button $variant="secondary" $size="sm">Editar</Button>
+        </Option>
+        <Option>
+          <OptionInfo>
+            <OptionIcon><FiShield size={16} /></OptionIcon>
+            <OptionText>
+              <strong>Rol</strong>
+              <span>{user?.role ?? "-"}</span>
+            </OptionText>
+          </OptionInfo>
         </Option>
       </Section>
 
@@ -134,13 +150,32 @@ function Settings() {
         <SectionTitle><h2>Preferencias</h2></SectionTitle>
         <Option>
           <OptionInfo>
-            <OptionIcon><FiSun size={16} /></OptionIcon>
+            <OptionIcon>{isDark ? <FiMoon size={16} /> : <FiSun size={16} />}</OptionIcon>
             <OptionText>
               <strong>Tema</strong>
-              <span>Claro</span>
+              <span>{isDark ? "Oscuro" : "Claro"}</span>
             </OptionText>
           </OptionInfo>
-          <Button $variant="secondary" $size="sm">Cambiar</Button>
+          <Button $variant="secondary" $size="sm" onClick={toggleMode}>
+            {isDark ? <FiSun size={14} /> : <FiMoon size={14} />}
+            Cambiar a {isDark ? "claro" : "oscuro"}
+          </Button>
+        </Option>
+      </Section>
+
+      <Section>
+        <SectionTitle><h2>Sesion</h2></SectionTitle>
+        <Option>
+          <OptionInfo>
+            <OptionIcon><FiLogOut size={16} /></OptionIcon>
+            <OptionText>
+              <strong>Cerrar sesion</strong>
+              <span>Saldras de la aplicacion en este navegador.</span>
+            </OptionText>
+          </OptionInfo>
+          <Button $variant="danger" $size="sm" onClick={logout}>
+            <FiLogOut size={14} /> Cerrar sesion
+          </Button>
         </Option>
       </Section>
     </Page>

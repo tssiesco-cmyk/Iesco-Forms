@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
-import { FiEdit3, FiPlus, FiX } from "react-icons/fi";
+import { FiEdit3, FiPlus, FiX, FiSearch } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import PageHeader from "../../components/molecules/PageHeader";
 import SearchToolbar from "../../components/molecules/SearchToolbar";
 import FormCard from "../../components/molecules/FormCard";
 import CreateCard from "../../components/molecules/CreateCard";
+import SkeletonCard from "../../components/molecules/SkeletonCard";
+import { ErrorState, EmptyState } from "../../components/molecules/StateView";
 import Button from "../../components/atoms/Button";
+import Spinner from "../../components/atoms/Spinner";
 
 const CardGrid = styled.div`
   display: grid;
@@ -29,7 +32,7 @@ const ModalOverlay = styled.div`
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.4);
+  background: ${({ theme }) => theme.colors.overlay};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,41 +111,46 @@ const ConfirmText = styled.p`
   }
 `;
 
-const colors = [
-  "linear-gradient(135deg, #6542F4 0%, #9B7DFF 100%)",
-  "linear-gradient(135deg, #8B5CF6 0%, #C4B5FD 100%)",
-  "linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)",
-  "linear-gradient(135deg, #6366F1 0%, #818CF8 100%)",
-  "linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)",
-  "linear-gradient(135deg, #0891B2 0%, #67E8F9 100%)",
-];
-
 function Forms() {
   const navigate = useNavigate();
-  const { forms, createForm, trashForm, getFormResponses } = useForms();
+  const { forms, status, error, reload, createForm, trashForm } = useForms();
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [formName, setFormName] = useState("");
   const [formDesc, setFormDesc] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const filtered = forms.filter((f) =>
     f.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleCreate = () => {
-    const newId = createForm(formName, formDesc);
+  const handleCreate = async () => {
+    if (creating) return;
+    setCreating(true);
+
+    const newId = await createForm(formName, formDesc);
+    setCreating(false);
+
+    // Si fallo, el aviso ya lo mostro el contexto: dejamos el modal abierto
+    // con lo que el usuario habia escrito para que pueda reintentar.
+    if (!newId) return;
+
     setShowModal(false);
     setFormName("");
     setFormDesc("");
     navigate(`/formularios/${newId}/editar`);
   };
 
-  const handleDelete = () => {
-    if (deleteTarget) {
-      trashForm(deleteTarget.id);
-      setDeleteTarget(null);
-    }
+  const handleDelete = async () => {
+    if (!deleteTarget || deleting) return;
+
+    setDeleting(true);
+    const ok = await trashForm(deleteTarget.id);
+    setDeleting(false);
+
+    if (ok) setDeleteTarget(null);
   };
 
   return (
@@ -159,19 +167,50 @@ function Forms() {
         onChange={(e) => setSearch(e.target.value)}
       />
 
+      {status === "error" && <ErrorState error={error} onRetry={reload} />}
+
+      {status === "loading" && (
+        <CardGrid>
+          {Array.from({ length: 8 }, (_, i) => <SkeletonCard key={i} />)}
+        </CardGrid>
+      )}
+
+      {status === "ready" && forms.length === 0 && (
+        <EmptyState
+          icon={<FiEdit3 size={24} />}
+          title="Todavia no tienes formularios"
+          text="Crea el primero desde cero o parte de una plantilla."
+        >
+          <Button onClick={() => setShowModal(true)}>
+            <FiPlus size={16} /> Nuevo formulario
+          </Button>
+          <Button $variant="secondary" onClick={() => navigate("/plantillas")}>
+            Ver plantillas
+          </Button>
+        </EmptyState>
+      )}
+
+      {status === "ready" && forms.length > 0 && filtered.length === 0 && (
+        <EmptyState
+          icon={<FiSearch size={24} />}
+          title="Sin resultados"
+          text={`Ningun formulario coincide con "${search}".`}
+          compact
+        />
+      )}
+
+      {status === "ready" && filtered.length > 0 && (
       <CardGrid>
-        <CreateCard label="Nuevo formulario" />
-        {filtered.map((f, i) => {
-          const responseCount = getFormResponses(f.id).length;
+        <CreateCard label="Nuevo formulario" onClick={() => setShowModal(true)} />
+        {filtered.map((f) => {
           return (
             <FormCard
               key={f.id}
               icon={<FiEdit3 size={24} />}
               title={f.title}
               date={f.status === "Borrador" ? "Borrador" : f.createdAt}
-              responses={responseCount}
+              responses={f.responseCount ?? 0}
               status={f.status}
-              color={colors[i % colors.length]}
               onClick={() => navigate(`/formularios/${f.id}/editar`)}
               onEdit={() => navigate(`/formularios/${f.id}/editar`)}
               onPreview={() => navigate(`/formularios/${f.id}/vista`)}
@@ -181,6 +220,7 @@ function Forms() {
           );
         })}
       </CardGrid>
+      )}
 
       {/* Modal crear */}
       {showModal && (
@@ -212,8 +252,13 @@ function Forms() {
               </div>
             </ModalBody>
             <ModalActions>
-              <Button $variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button onClick={handleCreate}>Crear formulario</Button>
+              <Button $variant="secondary" onClick={() => setShowModal(false)} disabled={creating}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreate} disabled={creating}>
+                {creating && <Spinner $size={13} $color="currentColor" />}
+                {creating ? "Creando..." : "Crear formulario"}
+              </Button>
             </ModalActions>
           </Modal>
         </ModalOverlay>
@@ -234,8 +279,13 @@ function Forms() {
               </ConfirmText>
             </ModalBody>
             <ModalActions>
-              <Button $variant="secondary" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
-              <Button $variant="danger" onClick={handleDelete}>Enviar a papelera</Button>
+              <Button $variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                Cancelar
+              </Button>
+              <Button $variant="danger" onClick={handleDelete} disabled={deleting}>
+                {deleting && <Spinner $size={13} $color="currentColor" />}
+                {deleting ? "Eliminando..." : "Enviar a papelera"}
+              </Button>
             </ModalActions>
           </Modal>
         </ModalOverlay>

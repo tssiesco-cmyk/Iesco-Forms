@@ -31,8 +31,8 @@ const IconWrapper = styled.div`
   width: 36px;
   height: 36px;
   border-radius: ${({ theme }) => theme.radii.md};
-  background: ${({ $bg, theme }) => $bg || theme.colors.primaryLight};
-  color: ${({ $color, theme }) => $color || theme.colors.primary};
+  background: ${({ $tone, theme }) => theme.colors[`${$tone}Bg`] || theme.colors.primaryBg};
+  color: ${({ $tone, theme }) => theme.colors[$tone] || theme.colors.primary};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -40,10 +40,11 @@ const IconWrapper = styled.div`
   margin-bottom: 4px;
 `;
 
-function StatCard({ icon, label, number, iconBg, iconColor }) {
+/** tone: "primary" | "success" | "warning" | "danger" | "info" */
+function StatCard({ icon, label, number, tone = "primary" }) {
   return (
     <Card>
-      <IconWrapper $bg={iconBg} $color={iconColor}>{icon}</IconWrapper>
+      <IconWrapper $tone={tone}>{icon}</IconWrapper>
       <Label>{label}</Label>
       <Value>{number}</Value>
     </Card>

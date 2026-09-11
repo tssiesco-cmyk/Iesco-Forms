@@ -7,9 +7,14 @@ const Card = styled.div`
   background: ${({ theme }) => theme.colors.surface};
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.radii.lg};
-  transition: all 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
   cursor: pointer;
   position: relative;
+
+  /* El transform del hover crea un stacking context, asi que el z-index del
+     menu queda encerrado en esta tarjeta y las siguientes del grid lo tapan.
+     Mientras el menu esta abierto subimos la tarjeta entera por encima. */
+  z-index: ${({ $menuOpen }) => ($menuOpen ? 20 : "auto")};
 
   &:hover {
     box-shadow: ${({ theme }) => theme.shadows.md};
@@ -20,7 +25,8 @@ const Card = styled.div`
 
 const Preview = styled.div`
   height: 120px;
-  background: ${({ $color }) => $color || "linear-gradient(135deg, #6542F4 0%, #9B7DFF 100%)"};
+  background: ${({ theme }) => theme.colors.surfaceAlt};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.borderLight};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -30,7 +36,7 @@ const Preview = styled.div`
 
 const PreviewIcon = styled.div`
   font-size: 32px;
-  color: rgba(255, 255, 255, 0.9);
+  color: ${({ theme }) => theme.colors.textMuted};
   display: flex;
   align-items: center;
 `;
@@ -120,7 +126,7 @@ const MetaText = styled.span`
   color: ${({ theme }) => theme.colors.textMuted};
 `;
 
-function FormCard({ icon, title, date, responses, status, color, onClick, onEdit, onPreview, onResults, onDuplicate, onDelete }) {
+function FormCard({ icon, title, date, responses, status, onClick, onEdit, onPreview, onResults, onDuplicate, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -146,51 +152,55 @@ function FormCard({ icon, title, date, responses, status, color, onClick, onEdit
     action?.();
   };
 
+  const hasMenu = Boolean(onEdit || onPreview || onResults || onDuplicate || onDelete);
+
   return (
-    <Card onClick={onClick}>
-      <Preview $color={color}>
+    <Card onClick={onClick} $menuOpen={menuOpen}>
+      <Preview>
         <PreviewIcon>{icon}</PreviewIcon>
       </Preview>
       <CardBody>
         <CardHeader>
           <Title>{title}</Title>
-          <MenuWrapper ref={menuRef}>
-            <MenuButton onClick={handleMenuClick}>
-              <FiMoreHorizontal size={16} />
-            </MenuButton>
-            {menuOpen && (
-              <Dropdown>
-                {onEdit && (
-                  <DropdownItem onClick={(e) => handleAction(e, onEdit)}>
-                    <FiEdit3 size={14} /> Editar
-                  </DropdownItem>
-                )}
-                {onPreview && (
-                  <DropdownItem onClick={(e) => handleAction(e, onPreview)}>
-                    <FiEye size={14} /> Vista previa
-                  </DropdownItem>
-                )}
-                {onResults && (
-                  <DropdownItem onClick={(e) => handleAction(e, onResults)}>
-                    <FiBarChart2 size={14} /> Resultados
-                  </DropdownItem>
-                )}
-                {onDuplicate && (
-                  <DropdownItem onClick={(e) => handleAction(e, onDuplicate)}>
-                    <FiCopy size={14} /> Duplicar
-                  </DropdownItem>
-                )}
-                {onDelete && (
-                  <>
-                    <Divider />
-                    <DropdownItem $danger onClick={(e) => handleAction(e, onDelete)}>
-                      <FiTrash2 size={14} /> Eliminar
+          {hasMenu && (
+            <MenuWrapper ref={menuRef}>
+              <MenuButton onClick={handleMenuClick}>
+                <FiMoreHorizontal size={16} />
+              </MenuButton>
+              {menuOpen && (
+                <Dropdown>
+                  {onEdit && (
+                    <DropdownItem onClick={(e) => handleAction(e, onEdit)}>
+                      <FiEdit3 size={14} /> Editar
                     </DropdownItem>
-                  </>
-                )}
-              </Dropdown>
-            )}
-          </MenuWrapper>
+                  )}
+                  {onPreview && (
+                    <DropdownItem onClick={(e) => handleAction(e, onPreview)}>
+                      <FiEye size={14} /> Vista previa
+                    </DropdownItem>
+                  )}
+                  {onResults && (
+                    <DropdownItem onClick={(e) => handleAction(e, onResults)}>
+                      <FiBarChart2 size={14} /> Resultados
+                    </DropdownItem>
+                  )}
+                  {onDuplicate && (
+                    <DropdownItem onClick={(e) => handleAction(e, onDuplicate)}>
+                      <FiCopy size={14} /> Duplicar
+                    </DropdownItem>
+                  )}
+                  {onDelete && (
+                    <>
+                      <Divider />
+                      <DropdownItem $danger onClick={(e) => handleAction(e, onDelete)}>
+                        <FiTrash2 size={14} /> Eliminar
+                      </DropdownItem>
+                    </>
+                  )}
+                </Dropdown>
+              )}
+            </MenuWrapper>
+          )}
         </CardHeader>
         <MetaText>{date}</MetaText>
         <Meta>

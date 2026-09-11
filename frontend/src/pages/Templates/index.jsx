@@ -1,3 +1,4 @@
+import { useState } from "react";
 import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
 import {
@@ -6,6 +7,8 @@ import {
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import PageHeader from "../../components/molecules/PageHeader";
+import { ErrorState, LoadingState } from "../../components/molecules/StateView";
+import Spinner from "../../components/atoms/Spinner";
 
 const Section = styled.section`
   margin-bottom: ${({ theme }) => theme.spacing["4xl"]};
@@ -55,14 +58,25 @@ const Card = styled.button`
     box-shadow: ${({ theme }) => theme.shadows.md};
     transform: translateY(-2px);
   }
+
+  &:disabled {
+    cursor: default;
+    opacity: ${({ $busy }) => ($busy ? 1 : 0.5)};
+  }
+
+  &:disabled:hover {
+    border-color: ${({ theme }) => theme.colors.border};
+    box-shadow: none;
+    transform: none;
+  }
 `;
 
 const CardIcon = styled.div`
   width: 44px;
   height: 44px;
   border-radius: ${({ theme }) => theme.radii.lg};
-  background: ${({ $bg }) => $bg};
-  color: ${({ $color }) => $color};
+  background: ${({ $tone, theme }) => theme.colors[`${$tone}Bg`] || theme.colors.primaryBg};
+  color: ${({ $tone, theme }) => theme.colors[$tone] || theme.colors.primary};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -92,15 +106,15 @@ const CardMeta = styled.span`
 `;
 
 const iconMap = {
-  "tpl-satisfaction": { icon: <FiSmile size={20} />, bg: "#F0ECFE", color: "#6542F4" },
-  "tpl-nps": { icon: <FiTrendingUp size={20} />, bg: "#EAFAF3", color: "#2DB87F" },
-  "tpl-event-feedback": { icon: <FiCalendar size={20} />, bg: "#FFF8EC", color: "#F5A623" },
-  "tpl-contact": { icon: <FiMail size={20} />, bg: "#EEF2FF", color: "#4F46E5" },
-  "tpl-registration": { icon: <FiUserPlus size={20} />, bg: "#ECFDF5", color: "#059669" },
-  "tpl-job": { icon: <FiBriefcase size={20} />, bg: "#FEF0F0", color: "#E34850" },
-  "tpl-quiz": { icon: <FiHelpCircle size={20} />, bg: "#FFF8EC", color: "#D97706" },
-  "tpl-performance": { icon: <FiStar size={20} />, bg: "#F0ECFE", color: "#7C3AED" },
-  "tpl-market": { icon: <FiPieChart size={20} />, bg: "#EEF2FF", color: "#3B82F6" },
+  "tpl-satisfaction": { icon: <FiSmile size={20} />, tone: "primary" },
+  "tpl-nps": { icon: <FiTrendingUp size={20} />, tone: "success" },
+  "tpl-event-feedback": { icon: <FiCalendar size={20} />, tone: "warning" },
+  "tpl-contact": { icon: <FiMail size={20} />, tone: "info" },
+  "tpl-registration": { icon: <FiUserPlus size={20} />, tone: "success" },
+  "tpl-job": { icon: <FiBriefcase size={20} />, tone: "danger" },
+  "tpl-quiz": { icon: <FiHelpCircle size={20} />, tone: "warning" },
+  "tpl-performance": { icon: <FiStar size={20} />, tone: "primary" },
+  "tpl-market": { icon: <FiPieChart size={20} />, tone: "info" },
 };
 
 const categories = [
@@ -123,13 +137,20 @@ const categories = [
 
 function Templates() {
   const navigate = useNavigate();
-  const { templates, createFormFromTemplate } = useForms();
+  const { templates, status, error, reload, createFormFromTemplate } = useForms();
 
-  const handleUseTemplate = (templateId) => {
-    const newId = createFormFromTemplate(templateId);
-    if (newId) {
-      navigate(`/formularios/${newId}/editar`);
-    }
+  // Se guarda cual plantilla se esta usando para mostrar el giro solo en esa
+  // tarjeta y evitar que se pulsen dos a la vez.
+  const [usingId, setUsingId] = useState(null);
+
+  const handleUseTemplate = async (templateId) => {
+    if (usingId) return;
+
+    setUsingId(templateId);
+    const newId = await createFormFromTemplate(templateId);
+    setUsingId(null);
+
+    if (newId) navigate(`/formularios/${newId}/editar`);
   };
 
   return (
@@ -139,7 +160,10 @@ function Templates() {
         subtitle="Elige una plantilla para crear tu formulario en segundos."
       />
 
-      {categories.map((cat) => (
+      {status === "error" && <ErrorState error={error} onRetry={reload} />}
+      {status === "loading" && <LoadingState text="Cargando plantillas..." />}
+
+      {status === "ready" && categories.map((cat) => (
         <Section key={cat.title}>
           <SectionTitle>{cat.title}</SectionTitle>
           <SectionSubtitle>{cat.subtitle}</SectionSubtitle>
@@ -149,13 +173,20 @@ function Templates() {
               const style = iconMap[tplId];
               if (!tpl) return null;
               return (
-                <Card key={tpl.id} onClick={() => handleUseTemplate(tpl.id)}>
-                  <CardIcon $bg={style.bg} $color={style.color}>
-                    {style.icon}
+                <Card
+                  key={tpl.id}
+                  onClick={() => handleUseTemplate(tpl.id)}
+                  disabled={Boolean(usingId)}
+                  $busy={usingId === tpl.id}
+                >
+                  <CardIcon $tone={style.tone}>
+                    {usingId === tpl.id ? <Spinner $size={20} /> : style.icon}
                   </CardIcon>
                   <CardTitle>{tpl.name}</CardTitle>
                   <CardDesc>{tpl.description}</CardDesc>
-                  <CardMeta>{tpl.questions.length} preguntas</CardMeta>
+                  <CardMeta>
+                    {usingId === tpl.id ? "Creando formulario..." : `${tpl.questions.length} preguntas`}
+                  </CardMeta>
                 </Card>
               );
             })}

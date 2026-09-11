@@ -4,7 +4,9 @@ import { FiEdit3, FiRotateCcw, FiTrash2, FiX, FiAlertTriangle } from "react-icon
 import { useForms } from "../../context/FormContext";
 import PageHeader from "../../components/molecules/PageHeader";
 import SearchToolbar from "../../components/molecules/SearchToolbar";
+import { ErrorState, LoadingState } from "../../components/molecules/StateView";
 import Button from "../../components/atoms/Button";
+import Spinner from "../../components/atoms/Spinner";
 
 const ListWrapper = styled.div`
   background: ${({ theme }) => theme.colors.surface};
@@ -116,7 +118,7 @@ const ModalOverlay = styled.div`
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.4);
+  background: ${({ theme }) => theme.colors.overlay};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -189,10 +191,35 @@ function formatTrashedDate(iso) {
 }
 
 function Trash() {
-  const { trashedForms, restoreForm, permanentDeleteForm, emptyTrash } = useForms();
+  const { trashedForms, status, error, reload, restoreForm, permanentDeleteForm, emptyTrash } = useForms();
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);
+  const [restoringId, setRestoringId] = useState(null);
+  const [working, setWorking] = useState(false);
+
+  const handleRestore = async (id) => {
+    if (restoringId) return;
+    setRestoringId(id);
+    await restoreForm(id);
+    setRestoringId(null);
+  };
+
+  const handleDeleteForever = async () => {
+    if (working) return;
+    setWorking(true);
+    const ok = await permanentDeleteForm(deleteTarget.id);
+    setWorking(false);
+    if (ok) setDeleteTarget(null);
+  };
+
+  const handleEmpty = async () => {
+    if (working) return;
+    setWorking(true);
+    const ok = await emptyTrash();
+    setWorking(false);
+    if (ok) setShowEmptyConfirm(false);
+  };
 
   const filtered = trashedForms.filter((f) =>
     f.title.toLowerCase().includes(search.toLowerCase())
@@ -217,7 +244,10 @@ function Trash() {
         />
       )}
 
-      {filtered.length > 0 ? (
+      {status === "error" && <ErrorState error={error} onRetry={reload} />}
+      {status === "loading" && <LoadingState text="Cargando papelera..." />}
+
+      {status === "ready" && (filtered.length > 0 ? (
         <ListWrapper>
           <ListHeader>
             <h2>Eliminados</h2>
@@ -231,8 +261,16 @@ function Trash() {
                 <span>{f.questions.length} preguntas · {formatTrashedDate(f.trashedAt)}</span>
               </Info>
               <Actions>
-                <Button $variant="secondary" $size="sm" onClick={() => restoreForm(f.id)}>
-                  <FiRotateCcw size={12} /> Restaurar
+                <Button
+                  $variant="secondary"
+                  $size="sm"
+                  onClick={() => handleRestore(f.id)}
+                  disabled={restoringId === f.id}
+                >
+                  {restoringId === f.id
+                    ? <Spinner $size={12} $color="currentColor" />
+                    : <FiRotateCcw size={12} />}
+                  Restaurar
                 </Button>
                 <Button $variant="ghost" $size="sm" onClick={() => setDeleteTarget(f)}>
                   <FiTrash2 size={14} />
@@ -247,7 +285,7 @@ function Trash() {
           <h3>La papelera esta vacia</h3>
           <p>Los formularios que elimines apareceran aqui.</p>
         </EmptyState>
-      )}
+      ))}
 
       {/* Modal eliminar permanentemente */}
       {deleteTarget && (
@@ -267,12 +305,12 @@ function Trash() {
               </ModalText>
             </ModalBody>
             <ModalActions>
-              <Button $variant="secondary" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
-              <Button $variant="danger" onClick={() => {
-                permanentDeleteForm(deleteTarget.id);
-                setDeleteTarget(null);
-              }}>
-                Eliminar permanentemente
+              <Button $variant="secondary" onClick={() => setDeleteTarget(null)} disabled={working}>
+                Cancelar
+              </Button>
+              <Button $variant="danger" onClick={handleDeleteForever} disabled={working}>
+                {working && <Spinner $size={13} $color="currentColor" />}
+                {working ? "Eliminando..." : "Eliminar permanentemente"}
               </Button>
             </ModalActions>
           </Modal>
@@ -297,12 +335,12 @@ function Trash() {
               </ModalText>
             </ModalBody>
             <ModalActions>
-              <Button $variant="secondary" onClick={() => setShowEmptyConfirm(false)}>Cancelar</Button>
-              <Button $variant="danger" onClick={() => {
-                emptyTrash();
-                setShowEmptyConfirm(false);
-              }}>
-                Vaciar papelera
+              <Button $variant="secondary" onClick={() => setShowEmptyConfirm(false)} disabled={working}>
+                Cancelar
+              </Button>
+              <Button $variant="danger" onClick={handleEmpty} disabled={working}>
+                {working && <Spinner $size={13} $color="currentColor" />}
+                {working ? "Vaciando..." : "Vaciar papelera"}
               </Button>
             </ModalActions>
           </Modal>

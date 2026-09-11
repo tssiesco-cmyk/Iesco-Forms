@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import {
@@ -8,6 +8,7 @@ import {
 import { useForms } from "../../context/FormContext";
 import Button from "../../components/atoms/Button";
 import Avatar from "../../components/atoms/Avatar";
+import { ErrorState, LoadingState } from "../../components/molecules/StateView";
 
 /* ===== LAYOUT ===== */
 const Page = styled.div`
@@ -96,8 +97,8 @@ const SideStatIcon = styled.div`
   width: 32px;
   height: 32px;
   border-radius: ${({ theme }) => theme.radii.md};
-  background: ${({ $bg }) => $bg};
-  color: ${({ $color }) => $color};
+  background: ${({ $tone, theme }) => theme.colors[`${$tone}Bg`] || theme.colors.primaryBg};
+  color: ${({ $tone, theme }) => theme.colors[$tone] || theme.colors.primary};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -156,8 +157,8 @@ const KpiIcon = styled.div`
   width: 36px;
   height: 36px;
   border-radius: ${({ theme }) => theme.radii.md};
-  background: ${({ $bg }) => $bg};
-  color: ${({ $color }) => $color};
+  background: ${({ $tone, theme }) => theme.colors[`${$tone}Bg`] || theme.colors.primaryBg};
+  color: ${({ $tone, theme }) => theme.colors[$tone] || theme.colors.primary};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -477,29 +478,30 @@ function formatShortDate(iso) {
 function DonutChart({ stats, total }) {
   const radius = 60;
   const circumference = 2 * Math.PI * radius;
-  let offset = 0;
+
+  // Cada segmento arranca donde terminan los anteriores, calculado sin mutar nada durante el render.
+  const segments = stats.reduce((acc, s) => {
+    const dash = (s.count / (total || 1)) * circumference;
+    const offset = acc.length > 0 ? acc[acc.length - 1].offset + acc[acc.length - 1].dash : 0;
+    return [...acc, { ...s, dash, offset }];
+  }, []);
 
   return (
     <DonutCenter>
       <DonutSvg viewBox="0 0 160 160">
-        {stats.map((s) => {
-          const dash = (s.count / (total || 1)) * circumference;
-          const currentOffset = offset;
-          offset += dash;
-          return (
-            <circle
-              key={s.label}
-              cx="80"
-              cy="80"
-              r={radius}
-              fill="none"
-              stroke={s.color}
-              strokeWidth="20"
-              strokeDasharray={`${dash} ${circumference - dash}`}
-              strokeDashoffset={-currentOffset}
-            />
-          );
-        })}
+        {segments.map((s) => (
+          <circle
+            key={s.label}
+            cx="80"
+            cy="80"
+            r={radius}
+            fill="none"
+            stroke={s.color}
+            strokeWidth="20"
+            strokeDasharray={`${s.dash} ${circumference - s.dash}`}
+            strokeDashoffset={-s.offset}
+          />
+        ))}
       </DonutSvg>
       <DonutLabel>
         <strong>{total}</strong>
@@ -512,16 +514,54 @@ function DonutChart({ stats, total }) {
 function FormResults() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getForm, getFormResponses } = useForms();
+  const { getForm, status, error, reload, getFormResponses, loadResponses } = useForms();
   const [activeTab, setActiveTab] = useState("resumen");
+
+  // Las respuestas no vienen en la carga inicial: se piden al entrar aqui.
+  const [responsesState, setResponsesState] = useState("loading");
+  const [responsesError, setResponsesError] = useState(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    setResponsesState("loading");
+    setResponsesError(null);
+
+    loadResponses(id, controller.signal).then((result) => {
+      if (!active || result.aborted) return;
+      if (result.ok) {
+        setResponsesState("ready");
+      } else {
+        setResponsesError(result.error);
+        setResponsesState("error");
+      }
+    });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [id, loadResponses]);
 
   const form = getForm(id);
   const formResponses = getFormResponses(id);
 
+  if (status === "loading") {
+    return <Page><Main><LoadingState text="Cargando formulario..." /></Main></Page>;
+  }
+
+  if (status === "error") {
+    return <Page><Main><ErrorState error={error} onRetry={reload} /></Main></Page>;
+  }
+
   if (!form) {
     return (
-      <Page><Main><EmptyMsg>Formulario no encontrado</EmptyMsg>
-        <Button onClick={() => navigate("/formularios")}>Volver</Button>
+      <Page><Main>
+        <EmptyMsg>No se encontro el formulario.</EmptyMsg>
+        <div style={{ textAlign: "center" }}>
+          <Button onClick={() => navigate("/formularios")}>Volver a mis formularios</Button>
+        </div>
       </Main></Page>
     );
   }
@@ -606,15 +646,15 @@ function FormResults() {
 
         <SideStats>
           <SideStatRow>
-            <SideStatIcon $bg="#F0ECFE" $color="#6542F4"><FiUsers size={14} /></SideStatIcon>
+            <SideStatIcon $tone="primary"><FiUsers size={14} /></SideStatIcon>
             <SideStatInfo><span>Respuestas</span><strong>{totalResponses}</strong></SideStatInfo>
           </SideStatRow>
           <SideStatRow>
-            <SideStatIcon $bg="#EAFAF3" $color="#2DB87F"><FiCheckCircle size={14} /></SideStatIcon>
+            <SideStatIcon $tone="success"><FiCheckCircle size={14} /></SideStatIcon>
             <SideStatInfo><span>Completado</span><strong>{completionRate}%</strong></SideStatInfo>
           </SideStatRow>
           <SideStatRow>
-            <SideStatIcon $bg="#FFF8EC" $color="#F5A623"><FiClock size={14} /></SideStatIcon>
+            <SideStatIcon $tone="warning"><FiClock size={14} /></SideStatIcon>
             <SideStatInfo>
               <span>Ultima respuesta</span>
               <strong>{totalResponses > 0 ? formatShortDate(formResponses[0].submittedAt) : "-"}</strong>
@@ -629,26 +669,34 @@ function FormResults() {
           <Tab $active={activeTab === "respuestas"} onClick={() => setActiveTab("respuestas")}>Respuestas ({totalResponses})</Tab>
         </Tabs>
 
-        {activeTab === "resumen" && (
+        {responsesState === "loading" && <LoadingState text="Cargando respuestas..." />}
+        {responsesState === "error" && (
+          <ErrorState
+            error={responsesError}
+            onRetry={() => loadResponses(id).then((r) => setResponsesState(r.ok ? "ready" : "error"))}
+          />
+        )}
+
+        {responsesState === "ready" && activeTab === "resumen" && (
           <>
             <KpiGrid>
               <KpiCard>
-                <KpiIcon $bg="#F0ECFE" $color="#6542F4"><FiUsers size={16} /></KpiIcon>
+                <KpiIcon $tone="primary"><FiUsers size={16} /></KpiIcon>
                 <KpiValue>{totalResponses}</KpiValue>
                 <KpiLabel>Total respuestas</KpiLabel>
               </KpiCard>
               <KpiCard>
-                <KpiIcon $bg="#EAFAF3" $color="#2DB87F"><FiPercent size={16} /></KpiIcon>
+                <KpiIcon $tone="success"><FiPercent size={16} /></KpiIcon>
                 <KpiValue>{completionRate}%</KpiValue>
                 <KpiLabel>Tasa de completado</KpiLabel>
               </KpiCard>
               <KpiCard>
-                <KpiIcon $bg="#FFF8EC" $color="#F5A623"><FiTrendingUp size={16} /></KpiIcon>
+                <KpiIcon $tone="warning"><FiTrendingUp size={16} /></KpiIcon>
                 <KpiValue>{questionsCount}</KpiValue>
                 <KpiLabel>Preguntas</KpiLabel>
               </KpiCard>
               <KpiCard>
-                <KpiIcon $bg="#FEF0F0" $color="#E34850"><FiClock size={16} /></KpiIcon>
+                <KpiIcon $tone="danger"><FiClock size={16} /></KpiIcon>
                 <KpiValue>{totalResponses > 0 ? formatShortDate(formResponses[0].submittedAt) : "-"}</KpiValue>
                 <KpiLabel>Ultima respuesta</KpiLabel>
               </KpiCard>
@@ -725,7 +773,7 @@ function FormResults() {
           </>
         )}
 
-        {activeTab === "respuestas" && (
+        {responsesState === "ready" && activeTab === "respuestas" && (
           totalResponses > 0 ? (
             <Table>
               <TableHeader>

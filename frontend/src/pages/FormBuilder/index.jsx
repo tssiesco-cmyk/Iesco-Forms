@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import {
   FiArrowLeft, FiPlus, FiTrash2, FiType, FiAlignLeft,
   FiCircle, FiCheckSquare, FiChevronUp, FiChevronDown,
-  FiEye, FiX, FiBarChart2, FiUser, FiToggleLeft, FiToggleRight, FiMail, FiPhone
+  FiEye, FiX, FiBarChart2, FiUser, FiToggleLeft, FiToggleRight, FiMail, FiPhone,
+  FiSend, FiRotateCcw, FiCheck, FiAlertCircle, FiImage, FiUpload
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import Button from "../../components/atoms/Button";
+import Badge from "../../components/atoms/Badge";
+import Spinner from "../../components/atoms/Spinner";
+import { ErrorState, LoadingState } from "../../components/molecules/StateView";
 
 const Page = styled.div`
   display: flex;
@@ -84,7 +88,7 @@ const QuestionNumber = styled.span`
   height: 24px;
   border-radius: ${({ theme }) => theme.radii.sm};
   background: ${({ $active, theme }) => $active ? theme.colors.primary : theme.colors.surfaceAlt};
-  color: ${({ $active, theme }) => $active ? "white" : theme.colors.textSecondary};
+  color: ${({ $active, theme }) => $active ? theme.colors.textInverse : theme.colors.textSecondary};
   font-size: ${({ theme }) => theme.fontSizes.xs};
   font-weight: ${({ theme }) => theme.fontWeights.semibold};
   display: flex;
@@ -138,6 +142,11 @@ const AddButton = styled.button`
     color: ${({ theme }) => theme.colors.primary};
     background: ${({ theme }) => theme.colors.surfaceHover};
   }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 `;
 
 /* --- MAIN EDITOR --- */
@@ -154,7 +163,33 @@ const EditorToolbar = styled.div`
   background: ${({ theme }) => theme.colors.surface};
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+`;
+
+const ToolbarStatus = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+const ToolbarHint = styled.span`
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textMuted};
+`;
+
+const SaveIndicator = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ $tone, theme }) => theme.colors[$tone] || theme.colors.textMuted};
+  transition: color 0.2s ease;
+`;
+
+const ToolbarActions = styled.div`
+  display: flex;
+  align-items: center;
   gap: 8px;
 `;
 
@@ -325,6 +360,22 @@ const RemoveOptionBtn = styled.button`
   }
 `;
 
+/* Vista previa inerte de como se vera el campo para quien responde */
+const PreviewTextArea = styled.textarea`
+  width: 100%;
+  min-height: 100px;
+  padding: 10px 12px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.radii.sm};
+  font-size: ${({ theme }) => theme.fontSizes.base};
+  font-family: inherit;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.text};
+  opacity: 0.5;
+  cursor: default;
+  resize: none;
+`;
+
 const AddOptionBtn = styled.button`
   display: flex;
   align-items: center;
@@ -371,7 +422,7 @@ const Toggle = styled.div`
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: white;
+    background: ${({ theme }) => theme.colors.surface};
     top: 2px;
     left: ${({ $active }) => $active ? "18px" : "2px"};
     transition: left 0.2s;
@@ -448,6 +499,122 @@ const IntroRemoveBtn = styled.button`
   }
 `;
 
+/* --- FONDO DE LA ENCUESTA --- */
+const BackgroundSection = styled.div`
+  padding: 12px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+`;
+
+const BackgroundPreview = styled.div`
+  height: 92px;
+  border-radius: ${({ theme }) => theme.radii.md};
+  border: 1px dashed ${({ $hasImage, theme }) => ($hasImage ? "transparent" : theme.colors.border)};
+  background-color: ${({ theme }) => theme.colors.surfaceAlt};
+  background-image: ${({ $image }) => ($image ? `url(${$image})` : "none")};
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: ${({ theme }) => theme.colors.textMuted};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  gap: 7px;
+  margin-bottom: 8px;
+  overflow: hidden;
+`;
+
+const BackgroundActions = styled.div`
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+`;
+
+const BackgroundButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: ${({ theme }) => theme.radii.sm};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
+  color: ${({ $danger, theme }) => ($danger ? theme.colors.danger : theme.colors.primary)};
+
+  &:hover {
+    background: ${({ $danger, theme }) => ($danger ? theme.colors.dangerBg : theme.colors.primaryBg)};
+  }
+
+  &:disabled { opacity: 0.5; cursor: default; }
+`;
+
+const OverlayToggle = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  cursor: pointer;
+
+  input {
+    accent-color: ${({ theme }) => theme.colors.primary};
+    cursor: pointer;
+  }
+`;
+
+const BackgroundHint = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.textMuted};
+  margin: 8px 0 0;
+  line-height: 1.45;
+`;
+
+const QuestionBackground = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0 4px;
+  margin-top: 16px;
+  border-top: 1px solid ${({ theme }) => theme.colors.borderLight};
+`;
+
+const QuestionBackgroundPreview = styled.div`
+  width: 88px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: ${({ theme }) => theme.radii.md};
+  border: 1px dashed ${({ $image, theme }) => ($image ? "transparent" : theme.colors.border)};
+  background-color: ${({ theme }) => theme.colors.surfaceAlt};
+  background-image: ${({ $image }) => ($image ? `url(${$image})` : "none")};
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.textMuted};
+`;
+
+const QuestionBackgroundLabel = styled.p`
+  margin: 0 0 7px;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const IntroFieldIcon = styled.span`
+  color: ${({ theme }) => theme.colors.textMuted};
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+`;
+
+const IntroEmpty = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textMuted};
+  line-height: 1.45;
+  margin: 0 6px 10px;
+`;
+
 const IntroAddBtn = styled.button`
   display: flex;
   align-items: center;
@@ -479,22 +646,91 @@ function FormBuilder() {
   const { id } = useParams();
   const navigate = useNavigate();
   const {
-    getForm, updateForm, addQuestion, updateQuestion,
+    getForm, status, error, reload, saveState, flushPendingWrites,
+    uploadBackground, removeBackground, setBackgroundOverlay,
+    setBackgroundPerQuestion, uploadQuestionBackground, removeQuestionBackground,
+    uploadIntroBackground, removeIntroBackground,
+    updateForm, addQuestion, updateQuestion,
     deleteQuestion, reorderQuestions, addOption, updateOption, deleteOption,
     updateIntroField, addIntroField, removeIntroField
   } = useForms();
 
   const form = getForm(id);
-  const [activeQuestionId, setActiveQuestionId] = useState(
-    form?.questions[0]?.id || null
-  );
+  const [selectedQuestionId, setSelectedQuestionId] = useState(null);
+  const [addingType, setAddingType] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadingQuestion, setUploadingQuestion] = useState(false);
+  const [uploadingIntro, setUploadingIntro] = useState(false);
+  const fileInputRef = useRef(null);
+  const questionFileInputRef = useRef(null);
+  const introFileInputRef = useRef(null);
+
+  const handlePickFile = async (event) => {
+    const file = event.target.files?.[0];
+    // Se limpia el input para que elegir el mismo archivo otra vez vuelva a disparar.
+    event.target.value = "";
+    if (!file) return;
+
+    setUploading(true);
+    await uploadBackground(id, file);
+    setUploading(false);
+  };
+
+  const handlePickIntroFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploadingIntro(true);
+    await uploadIntroBackground(id, file);
+    setUploadingIntro(false);
+  };
+
+  const handlePickQuestionFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !activeQuestionId) return;
+
+    setUploadingQuestion(true);
+    await uploadQuestionBackground(id, activeQuestionId, file);
+    setUploadingQuestion(false);
+  };
+
+  // Al entrar directo por URL el formulario aun no esta cargado, asi que no hay
+  // nada que seleccionar. En vez de sincronizarlo con un efecto, la pregunta
+  // activa se deriva aqui: la elegida si sigue existiendo, si no la primera.
+  const questions = form?.questions ?? [];
+  const activeQuestionId =
+    selectedQuestionId && questions.some((q) => q.id === selectedQuestionId)
+      ? selectedQuestionId
+      : questions[0]?.id ?? null;
+  const setActiveQuestionId = setSelectedQuestionId;
+
+  if (status === "loading") {
+    return (
+      <Page>
+        <LoadingState text="Cargando formulario..." />
+      </Page>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <Page>
+        <ErrorState error={error} onRetry={reload} />
+      </Page>
+    );
+  }
 
   if (!form) {
     return (
       <Page>
         <EmptyState>
           <h2>Formulario no encontrado</h2>
-          <Button onClick={() => navigate("/formularios")}>Volver</Button>
+          <p>Puede que se haya eliminado o que el enlace sea incorrecto.</p>
+          <div style={{ marginTop: 20 }}>
+            <Button onClick={() => navigate("/formularios")}>Volver a mis formularios</Button>
+          </div>
         </EmptyState>
       </Page>
     );
@@ -503,18 +739,19 @@ function FormBuilder() {
   const activeQuestion = form.questions.find((q) => q.id === activeQuestionId);
   const activeIndex = form.questions.findIndex((q) => q.id === activeQuestionId);
 
-  const handleAddQuestion = (type) => {
-    const newId = addQuestion(id, type);
-    setActiveQuestionId(newId);
+  const handleAddQuestion = async (type) => {
+    if (addingType) return;
+
+    setAddingType(type);
+    const newId = await addQuestion(id, type);
+    setAddingType(null);
+
+    if (newId) setActiveQuestionId(newId);
   };
 
-  const handleDeleteQuestion = (qId) => {
-    deleteQuestion(id, qId);
-    if (activeQuestionId === qId) {
-      const remaining = form.questions.filter((q) => q.id !== qId);
-      setActiveQuestionId(remaining[0]?.id || null);
-    }
-  };
+  // No hace falta reelegir pregunta: al desaparecer la seleccionada, la
+  // derivacion de arriba cae sola sobre la primera que quede.
+  const handleDeleteQuestion = (qId) => deleteQuestion(id, qId);
 
   const handleMoveUp = () => {
     if (activeIndex > 0) {
@@ -528,11 +765,27 @@ function FormBuilder() {
     }
   };
 
+  const isPublished = form.status === "Activo";
+  // Un formulario vacio no se puede publicar: necesita al menos una pregunta
+  // o un campo de datos del respondedor activo.
+  const canPublish =
+    form.questions.length > 0 || form.introFields.some((f) => f.enabled);
+
+  const handlePublish = () => {
+    if (!canPublish) return;
+    // Antes de publicar se manda lo que este esperando, para que no se publique
+    // una version sin el ultimo texto escrito.
+    flushPendingWrites();
+    updateForm(id, { status: "Activo" });
+  };
+
+  const handleUnpublish = () => updateForm(id, { status: "Borrador" });
+
   return (
     <Page>
       <LeftPanel>
         <PanelHeader>
-          <BackButton onClick={() => navigate("/formularios")}>
+          <BackButton onClick={() => { flushPendingWrites(); navigate("/formularios"); }}>
             <FiArrowLeft size={18} />
           </BackButton>
           <FormTitle
@@ -542,10 +795,72 @@ function FormBuilder() {
           />
         </PanelHeader>
 
+        <BackgroundSection>
+          <IntroSectionTitle>
+            <FiImage size={12} /> Fondo de la encuesta
+          </IntroSectionTitle>
+
+          <BackgroundPreview $image={form.backgroundImage} $hasImage={Boolean(form.backgroundImage)}>
+            {!form.backgroundImage && <><FiImage size={14} /> Sin fondo</>}
+          </BackgroundPreview>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={handlePickFile}
+            hidden
+          />
+
+          <BackgroundActions>
+            <BackgroundButton onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+              {uploading ? <Spinner $size={12} /> : <FiUpload size={12} />}
+              {uploading ? "Subiendo..." : form.backgroundImage ? "Cambiar" : "Subir imagen"}
+            </BackgroundButton>
+
+            {form.backgroundImage && (
+              <BackgroundButton $danger onClick={() => removeBackground(id)} disabled={uploading}>
+                <FiX size={12} /> Quitar
+              </BackgroundButton>
+            )}
+          </BackgroundActions>
+
+          <OverlayToggle>
+            <input
+              type="checkbox"
+              checked={Boolean(form.backgroundPerQuestion)}
+              onChange={(e) => setBackgroundPerQuestion(id, e.target.checked)}
+            />
+            Imagen distinta por pregunta
+          </OverlayToggle>
+
+          {form.backgroundImage && (
+            <OverlayToggle>
+              <input
+                type="checkbox"
+                checked={form.backgroundOverlay !== false}
+                onChange={(e) => setBackgroundOverlay(id, e.target.checked)}
+              />
+              Velo oscuro para que se lea el texto
+            </OverlayToggle>
+          )}
+
+          <BackgroundHint>
+            {form.backgroundPerQuestion
+              ? "Cada pregunta puede tener la suya. Las que no tengan usan esta."
+              : "PNG, JPG o WebP. Maximo 5 MB."}
+          </BackgroundHint>
+        </BackgroundSection>
+
         <IntroSection>
           <IntroSectionTitle>
             <FiUser size={12} /> Datos del respondedor
           </IntroSectionTitle>
+          {form.introFields.length === 0 && (
+            <IntroEmpty>
+              Sin campos. Agrega los que necesites para pedir datos antes de las preguntas.
+            </IntroEmpty>
+          )}
           {form.introFields.map((field) => (
             <IntroFieldRow key={field.id}>
               <IntroToggle
@@ -555,7 +870,9 @@ function FormBuilder() {
               >
                 {field.enabled ? <FiToggleRight size={18} /> : <FiToggleLeft size={18} />}
               </IntroToggle>
-              {field.type === "email" ? <FiMail size={14} style={{ color: "#9E9EA7", flexShrink: 0 }} /> : field.type === "phone" ? <FiPhone size={14} style={{ color: "#9E9EA7", flexShrink: 0 }} /> : <FiUser size={14} style={{ color: "#9E9EA7", flexShrink: 0 }} />}
+              <IntroFieldIcon>
+                {field.type === "email" ? <FiMail size={14} /> : field.type === "phone" ? <FiPhone size={14} /> : <FiUser size={14} />}
+              </IntroFieldIcon>
               <IntroFieldInput
                 value={field.label}
                 onChange={(e) => updateIntroField(id, field.id, { label: e.target.value })}
@@ -566,6 +883,56 @@ function FormBuilder() {
               </IntroRemoveBtn>
             </IntroFieldRow>
           ))}
+          {form.backgroundPerQuestion && (
+            <QuestionBackground>
+              <QuestionBackgroundPreview
+                $image={form.introBackgroundImage || form.backgroundImage}
+              >
+                {!form.introBackgroundImage && !form.backgroundImage && (
+                  <><FiImage size={13} /> Sin imagen</>
+                )}
+              </QuestionBackgroundPreview>
+
+              <div>
+                <QuestionBackgroundLabel>
+                  {form.introBackgroundImage
+                    ? "Imagen de esta pantalla"
+                    : "Usando la imagen del formulario"}
+                </QuestionBackgroundLabel>
+
+                <input
+                  ref={introFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handlePickIntroFile}
+                  hidden
+                />
+
+                <BackgroundActions>
+                  <BackgroundButton
+                    onClick={() => introFileInputRef.current?.click()}
+                    disabled={uploadingIntro}
+                  >
+                    {uploadingIntro ? <Spinner $size={12} /> : <FiUpload size={12} />}
+                    {uploadingIntro
+                      ? "Subiendo..."
+                      : form.introBackgroundImage ? "Cambiar" : "Subir imagen"}
+                  </BackgroundButton>
+
+                  {form.introBackgroundImage && (
+                    <BackgroundButton
+                      $danger
+                      onClick={() => removeIntroBackground(id)}
+                      disabled={uploadingIntro}
+                    >
+                      <FiX size={12} /> Quitar
+                    </BackgroundButton>
+                  )}
+                </BackgroundActions>
+              </div>
+            </QuestionBackground>
+          )}
+
           <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
             <IntroAddBtn onClick={() => addIntroField(id, "name")}>
               <FiUser size={12} /> Nombre
@@ -603,17 +970,17 @@ function FormBuilder() {
         <AddSection>
           <AddTitle>Agregar pregunta</AddTitle>
           <AddGrid>
-            <AddButton onClick={() => handleAddQuestion("short_text")}>
-              <FiType size={14} /> Texto corto
+            <AddButton onClick={() => handleAddQuestion("short_text")} disabled={Boolean(addingType)}>
+              {addingType === "short_text" ? <Spinner $size={14} /> : <FiType size={14} />} Texto corto
             </AddButton>
-            <AddButton onClick={() => handleAddQuestion("long_text")}>
-              <FiAlignLeft size={14} /> Texto largo
+            <AddButton onClick={() => handleAddQuestion("long_text")} disabled={Boolean(addingType)}>
+              {addingType === "long_text" ? <Spinner $size={14} /> : <FiAlignLeft size={14} />} Texto largo
             </AddButton>
-            <AddButton onClick={() => handleAddQuestion("single_choice")}>
-              <FiCircle size={14} /> Opcion unica
+            <AddButton onClick={() => handleAddQuestion("single_choice")} disabled={Boolean(addingType)}>
+              {addingType === "single_choice" ? <Spinner $size={14} /> : <FiCircle size={14} />} Opcion unica
             </AddButton>
-            <AddButton onClick={() => handleAddQuestion("multiple_choice")}>
-              <FiCheckSquare size={14} /> Multiple
+            <AddButton onClick={() => handleAddQuestion("multiple_choice")} disabled={Boolean(addingType)}>
+              {addingType === "multiple_choice" ? <Spinner $size={14} /> : <FiCheckSquare size={14} />} Multiple
             </AddButton>
           </AddGrid>
         </AddSection>
@@ -621,20 +988,51 @@ function FormBuilder() {
 
       <MainEditor>
         <EditorToolbar>
-          <Button
-            $variant="secondary"
-            $size="sm"
-            onClick={() => navigate(`/formularios/${id}/resultados`)}
-          >
-            <FiBarChart2 size={14} /> Resultados
-          </Button>
-          <Button
-            $variant="secondary"
-            $size="sm"
-            onClick={() => navigate(`/formularios/${id}/vista`)}
-          >
-            <FiEye size={14} /> Vista previa
-          </Button>
+          <ToolbarStatus>
+            <Badge $variant={isPublished ? "success" : "warning"}>
+              {isPublished ? "Publicado" : "Borrador"}
+            </Badge>
+
+            {saveState === "saving" && (
+              <SaveIndicator><Spinner $size={12} /> Guardando...</SaveIndicator>
+            )}
+            {saveState === "saved" && (
+              <SaveIndicator $tone="success"><FiCheck size={13} /> Guardado</SaveIndicator>
+            )}
+            {saveState === "error" && (
+              <SaveIndicator $tone="danger"><FiAlertCircle size={13} /> Sin guardar</SaveIndicator>
+            )}
+
+            {saveState === "idle" && !isPublished && !canPublish && (
+              <ToolbarHint>Agrega una pregunta o un campo para poder publicar</ToolbarHint>
+            )}
+          </ToolbarStatus>
+
+          <ToolbarActions>
+            <Button
+              $variant="secondary"
+              $size="sm"
+              onClick={() => { flushPendingWrites(); navigate(`/formularios/${id}/resultados`); }}
+            >
+              <FiBarChart2 size={14} /> Resultados
+            </Button>
+            <Button
+              $variant="secondary"
+              $size="sm"
+              onClick={() => { flushPendingWrites(); navigate(`/formularios/${id}/vista`); }}
+            >
+              <FiEye size={14} /> Vista previa
+            </Button>
+            {isPublished ? (
+              <Button $variant="secondary" $size="sm" onClick={handleUnpublish}>
+                <FiRotateCcw size={14} /> Volver a borrador
+              </Button>
+            ) : (
+              <Button $size="sm" onClick={handlePublish} disabled={!canPublish}>
+                <FiSend size={14} /> Publicar
+              </Button>
+            )}
+          </ToolbarActions>
         </EditorToolbar>
 
         <EditorContent>
@@ -718,22 +1116,60 @@ function FormBuilder() {
                 )}
 
                 {activeQuestion.type === "long_text" && (
-                  <textarea
+                  <PreviewTextArea
                     disabled
                     placeholder="Respuesta larga del usuario..."
-                    style={{
-                      width: "100%",
-                      minHeight: "100px",
-                      padding: "10px 12px",
-                      border: "1px solid #e8e8ed",
-                      borderRadius: "6px",
-                      opacity: 0.5,
-                      cursor: "default",
-                      resize: "none",
-                      fontFamily: "inherit",
-                      fontSize: "14px",
-                    }}
                   />
+                )}
+
+                {form.backgroundPerQuestion && (
+                  <QuestionBackground>
+                    <QuestionBackgroundPreview
+                      $image={activeQuestion.backgroundImage || form.backgroundImage}
+                    >
+                      {!activeQuestion.backgroundImage && !form.backgroundImage && (
+                        <><FiImage size={13} /> Sin imagen</>
+                      )}
+                    </QuestionBackgroundPreview>
+
+                    <div>
+                      <QuestionBackgroundLabel>
+                        {activeQuestion.backgroundImage
+                          ? "Imagen de esta pregunta"
+                          : "Usando la imagen del formulario"}
+                      </QuestionBackgroundLabel>
+
+                      <input
+                        ref={questionFileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={handlePickQuestionFile}
+                        hidden
+                      />
+
+                      <BackgroundActions>
+                        <BackgroundButton
+                          onClick={() => questionFileInputRef.current?.click()}
+                          disabled={uploadingQuestion}
+                        >
+                          {uploadingQuestion ? <Spinner $size={12} /> : <FiUpload size={12} />}
+                          {uploadingQuestion
+                            ? "Subiendo..."
+                            : activeQuestion.backgroundImage ? "Cambiar" : "Subir imagen"}
+                        </BackgroundButton>
+
+                        {activeQuestion.backgroundImage && (
+                          <BackgroundButton
+                            $danger
+                            onClick={() => removeQuestionBackground(id, activeQuestion.id)}
+                            disabled={uploadingQuestion}
+                          >
+                            <FiX size={12} /> Quitar
+                          </BackgroundButton>
+                        )}
+                      </BackgroundActions>
+                    </div>
+                  </QuestionBackground>
                 )}
 
                 <QFooter>

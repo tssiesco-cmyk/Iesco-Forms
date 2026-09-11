@@ -11,6 +11,8 @@ const GlobalStyles = createGlobalStyle`
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Alinea scrollbars, autocompletado y controles nativos con el tema */
+    color-scheme: ${({ theme }) => theme.mode};
   }
 
   body {
@@ -19,6 +21,7 @@ const GlobalStyles = createGlobalStyle`
     background: ${({ theme }) => theme.colors.background};
     min-height: 100vh;
     line-height: 1.5;
+    transition: background 0.2s ease, color 0.2s ease;
   }
 
   button {
@@ -32,6 +35,12 @@ const GlobalStyles = createGlobalStyle`
   input, textarea, select {
     font-family: inherit;
     outline: none;
+    color: ${({ theme }) => theme.colors.text};
+    background-color: transparent;
+  }
+
+  ::placeholder {
+    color: ${({ theme }) => theme.colors.textMuted};
   }
 
   a {

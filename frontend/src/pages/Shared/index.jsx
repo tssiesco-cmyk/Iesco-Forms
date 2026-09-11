@@ -20,8 +20,8 @@ const CardGrid = styled.div`
 `;
 
 const sharedForms = [
-  { name: "Encuesta de equipo", sharedBy: "Carlos", date: "Compartido hoy", responses: 12, color: "linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)" },
-  { name: "Registro de visitantes", sharedBy: "Maria", date: "Compartido ayer", responses: 34, color: "linear-gradient(135deg, #6366F1 0%, #818CF8 100%)" },
+  { name: "Encuesta de equipo", sharedBy: "Carlos", date: "Compartido hoy", responses: 12 },
+  { name: "Registro de visitantes", sharedBy: "Maria", date: "Compartido ayer", responses: 34 },
 ];
 
 function Shared() {
@@ -50,7 +50,6 @@ function Shared() {
             title={f.name}
             date={`${f.date} por ${f.sharedBy}`}
             responses={f.responses}
-            color={f.color}
           />
         ))}
       </CardGrid>

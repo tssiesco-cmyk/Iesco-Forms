@@ -1,8 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import styled, { keyframes, css } from "styled-components";
-import { FiArrowRight, FiArrowLeft, FiCheck, FiX, FiUser, FiMail } from "react-icons/fi";
+import { FiArrowRight, FiArrowLeft, FiCheck, FiX, FiAlertTriangle } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
+import Spinner from "../../components/atoms/Spinner";
 
 /* --- ANIMATIONS --- */
 const slideUp = keyframes`
@@ -15,24 +16,70 @@ const slideDown = keyframes`
   to { opacity: 1; transform: translateY(0); }
 `;
 
-const fadeIn = keyframes`
-  from { opacity: 0; }
-  to { opacity: 1; }
-`;
-
 const scaleIn = keyframes`
   from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
 `;
 
 /* --- LAYOUT --- */
+/**
+ * Los colores de esta pantalla van por variables CSS en vez de leer el tema en
+ * cada componente. Asi, cuando el formulario tiene imagen de fondo, basta con
+ * redefinirlas aqui arriba para que todo el texto pase a blanco, sin tocar los
+ * veinte componentes de abajo.
+ */
 const Page = styled.div`
+  --fv-text: ${({ theme }) => theme.colors.text};
+  --fv-secondary: ${({ theme }) => theme.colors.textSecondary};
+  --fv-muted: ${({ theme }) => theme.colors.textMuted};
+  --fv-border: ${({ theme }) => theme.colors.border};
+  --fv-border-strong: ${({ theme }) => theme.colors.borderInput};
+  --fv-surface: ${({ theme }) => theme.colors.surface};
+  --fv-surface-alt: ${({ theme }) => theme.colors.surfaceAlt};
+  --fv-accent: ${({ theme }) => theme.colors.primary};
+  --fv-accent-hover: ${({ theme }) => theme.colors.primaryHover};
+  --fv-accent-soft: ${({ theme }) => theme.colors.primaryBg};
+  --fv-on-accent: ${({ theme }) => theme.colors.textInverse};
+
+  ${({ $hasBackground }) => $hasBackground && css`
+    --fv-text: #FFFFFF;
+    --fv-secondary: rgba(255, 255, 255, 0.78);
+    --fv-muted: rgba(255, 255, 255, 0.58);
+    --fv-border: rgba(255, 255, 255, 0.3);
+    --fv-border-strong: rgba(255, 255, 255, 0.55);
+    --fv-surface: rgba(255, 255, 255, 0.1);
+    --fv-surface-alt: rgba(255, 255, 255, 0.16);
+    --fv-accent: #FFFFFF;
+    --fv-accent-hover: rgba(255, 255, 255, 0.88);
+    --fv-accent-soft: rgba(255, 255, 255, 0.22);
+    --fv-on-accent: #111111;
+  `}
+
   min-height: 100vh;
-  background: ${({ $bg }) => $bg || "#6542F4"};
+  background-color: ${({ theme }) => theme.colors.background};
+  color: var(--fv-text);
   display: flex;
   flex-direction: column;
   position: relative;
-  transition: background 0.5s ease;
+  isolation: isolate;
+
+  ${({ $image }) => $image && css`
+    background-image: url("${$image}");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+  `}
+
+  /* El velo: sin el, el texto se pierde sobre casi cualquier foto. */
+  ${({ $image, $overlay }) => $image && $overlay && css`
+    &::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      z-index: -1;
+    }
+  `}
 `;
 
 const ProgressBar = styled.div`
@@ -40,7 +87,7 @@ const ProgressBar = styled.div`
   top: 0;
   left: 0;
   height: 4px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--fv-accent);
   transition: width 0.4s ease;
   z-index: 100;
 `;
@@ -61,19 +108,18 @@ const CloseButton = styled.button`
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
+  background: var(--fv-surface-alt);
+  color: var(--fv-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(8px);
   transition: background 0.15s;
 
-  &:hover { background: rgba(255, 255, 255, 0.25); }
+  &:hover { background: var(--fv-border); }
 `;
 
 const FormTitleBar = styled.span`
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--fv-secondary);
   font-size: 14px;
   font-weight: 500;
 `;
@@ -93,7 +139,7 @@ const QuestionContainer = styled.div`
 const QuestionCard = styled.div`
   width: 100%;
   max-width: 620px;
-  color: white;
+  color: var(--fv-text);
 `;
 
 const QuestionNumber = styled.span`
@@ -101,7 +147,7 @@ const QuestionNumber = styled.span`
   align-items: center;
   gap: 4px;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--fv-muted);
   margin-bottom: 16px;
   font-weight: 500;
 `;
@@ -116,13 +162,13 @@ const QuestionTitle = styled.h1`
 
 const QuestionDesc = styled.p`
   font-size: 16px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--fv-secondary);
   margin: 0 0 32px;
   line-height: 1.5;
 `;
 
 const RequiredBadge = styled.span`
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--fv-muted);
   font-size: 13px;
   margin-left: 4px;
 `;
@@ -132,8 +178,8 @@ const TextInput = styled.input`
   width: 100%;
   background: transparent;
   border: none;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
-  color: white;
+  border-bottom: 2px solid var(--fv-border);
+  color: var(--fv-text);
   font-size: 22px;
   padding: 12px 0;
   outline: none;
@@ -141,11 +187,11 @@ const TextInput = styled.input`
   font-family: inherit;
 
   &:focus {
-    border-bottom-color: white;
+    border-bottom-color: var(--fv-accent);
   }
 
   &::placeholder {
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--fv-muted);
   }
 `;
 
@@ -153,8 +199,8 @@ const TextArea = styled.textarea`
   width: 100%;
   background: transparent;
   border: none;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
-  color: white;
+  border-bottom: 2px solid var(--fv-border);
+  color: var(--fv-text);
   font-size: 20px;
   padding: 12px 0;
   outline: none;
@@ -165,11 +211,11 @@ const TextArea = styled.textarea`
   transition: border-color 0.2s;
 
   &:focus {
-    border-bottom-color: white;
+    border-bottom-color: var(--fv-accent);
   }
 
   &::placeholder {
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--fv-muted);
   }
 `;
 
@@ -183,20 +229,19 @@ const OptionButton = styled.button`
   width: 100%;
   padding: 16px 20px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, ${({ $selected }) => $selected ? "0.9" : "0.25"});
-  background: ${({ $selected }) => $selected ? "rgba(255, 255, 255, 0.2)" : "rgba(255, 255, 255, 0.07)"};
-  color: white;
+  border: 1px solid ${({ $selected }) => $selected ? "var(--fv-accent)" : "var(--fv-border)"};
+  background: ${({ $selected }) => $selected ? "var(--fv-accent-soft)" : "var(--fv-surface)"};
+  color: var(--fv-text);
   font-size: 16px;
   text-align: left;
   display: flex;
   align-items: center;
   gap: 14px;
   transition: all 0.15s ease;
-  backdrop-filter: blur(4px);
 
   &:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.5);
+    background: var(--fv-surface-alt);
+    border-color: var(--fv-border-strong);
   }
 `;
 
@@ -204,7 +249,8 @@ const OptionKey = styled.span`
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, ${({ $selected }) => $selected ? "0.3" : "0.12"});
+  background: ${({ $selected }) => $selected ? "var(--fv-accent)" : "var(--fv-surface-alt)"};
+  color: ${({ $selected }) => $selected ? "var(--fv-on-accent)" : "var(--fv-secondary)"};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -217,15 +263,15 @@ const OptionCheckmark = styled.div`
   width: 22px;
   height: 22px;
   border-radius: ${({ $type }) => $type === "single_choice" ? "50%" : "4px"};
-  border: 2px solid rgba(255, 255, 255, ${({ $selected }) => $selected ? "0.9" : "0.3"});
+  border: 2px solid ${({ $selected }) => $selected ? "var(--fv-accent)" : "var(--fv-border-strong)"};
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   margin-left: auto;
   transition: all 0.15s;
-  background: ${({ $selected }) => $selected ? "rgba(255, 255, 255, 0.9)" : "transparent"};
-  color: ${({ $selected }) => $selected ? "#6542F4" : "transparent"};
+  background: ${({ $selected }) => $selected ? "var(--fv-accent)" : "transparent"};
+  color: ${({ $selected }) => $selected ? "var(--fv-on-accent)" : "transparent"};
 `;
 
 /* --- NAVIGATION --- */
@@ -251,33 +297,47 @@ const NavButton = styled.button`
   height: 44px;
   padding: 0 20px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
+  background: var(--fv-surface);
+  border: 1px solid var(--fv-border);
+  color: var(--fv-text);
   font-size: 14px;
   font-weight: 600;
   display: flex;
   align-items: center;
   gap: 8px;
-  backdrop-filter: blur(8px);
   transition: all 0.15s;
 
-  &:hover { background: rgba(255, 255, 255, 0.25); }
-  &:disabled { opacity: 0.3; cursor: default; }
+  &:hover { background: var(--fv-surface-alt); }
+  &:disabled { opacity: 0.4; cursor: default; }
 `;
 
 const SubmitButton = styled(NavButton)`
-  background: white;
-  color: #6542F4;
+  background: var(--fv-accent);
+  border-color: var(--fv-accent);
+  color: var(--fv-on-accent);
 
-  &:hover { background: #f0f0f0; }
+  &:hover { background: var(--fv-accent-hover); }
 `;
 
 const PressEnter = styled.span`
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--fv-muted);
   display: flex;
   align-items: center;
   gap: 6px;
+`;
+
+const SubmitError = styled.div`
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: ${({ theme }) => theme.colors.dangerBg};
+  color: ${({ theme }) => theme.colors.danger};
+  font-size: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.45;
 `;
 
 /* --- THANK YOU --- */
@@ -287,7 +347,7 @@ const ThankYou = styled.div`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--fv-text);
   text-align: center;
   padding: 24px;
   animation: ${scaleIn} 0.5s ease;
@@ -297,7 +357,8 @@ const CheckCircle = styled.div`
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: ${({ theme }) => theme.colors.successBg};
+  color: ${({ theme }) => theme.colors.success};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -312,7 +373,7 @@ const ThankTitle = styled.h1`
 
 const ThankText = styled.p`
   font-size: 18px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--fv-secondary);
   margin: 0 0 32px;
 `;
 
@@ -320,7 +381,7 @@ const ThankText = styled.p`
 const IntroCard = styled.div`
   width: 100%;
   max-width: 520px;
-  color: white;
+  color: var(--fv-text);
   animation: ${scaleIn} 0.4s ease;
 `;
 
@@ -333,7 +394,7 @@ const IntroTitle = styled.h1`
 
 const IntroDesc = styled.p`
   font-size: 17px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--fv-secondary);
   margin: 0 0 36px;
   line-height: 1.5;
 `;
@@ -348,7 +409,7 @@ const IntroForm = styled.div`
 const IntroFieldLabel = styled.label`
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--fv-secondary);
   margin-bottom: 6px;
   display: flex;
   align-items: center;
@@ -364,8 +425,8 @@ const IntroInput = styled.input`
   width: 100%;
   background: transparent;
   border: none;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
-  color: white;
+  border-bottom: 2px solid var(--fv-border);
+  color: var(--fv-text);
   font-size: 20px;
   padding: 10px 0;
   outline: none;
@@ -373,11 +434,11 @@ const IntroInput = styled.input`
   transition: border-color 0.2s;
 
   &:focus {
-    border-bottom-color: white;
+    border-bottom-color: var(--fv-accent);
   }
 
   &::placeholder {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--fv-muted);
   }
 `;
 
@@ -385,8 +446,8 @@ const StartButton = styled.button`
   height: 48px;
   padding: 0 28px;
   border-radius: 8px;
-  background: white;
-  color: #6542F4;
+  background: var(--fv-accent);
+  color: var(--fv-on-accent);
   font-size: 16px;
   font-weight: 600;
   display: inline-flex;
@@ -395,43 +456,95 @@ const StartButton = styled.button`
   transition: all 0.15s;
   align-self: flex-start;
 
-  &:hover { background: #f0f0f0; }
+  &:hover { background: var(--fv-accent-hover); }
   &:disabled { opacity: 0.4; cursor: default; }
 `;
-
-/* --- BACKGROUNDS --- */
-const backgrounds = [
-  "#6542F4",
-  "#7C3AED",
-  "#2563EB",
-  "#0891B2",
-  "#059669",
-  "#D97706",
-  "#DC2626",
-  "#6542F4",
-];
 
 function FormView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getForm, addResponse } = useForms();
+  const { getForm, status, error, addResponse } = useForms();
   const form = getForm(id);
+
+  // El fondo lo elige quien crea el formulario. Cuando hay imagen, el texto de
+  // toda la pantalla pasa a blanco mediante las variables CSS de Page.
+  const formBackground = form?.backgroundImage || "";
+
+  /**
+   * Con el fondo por pregunta activado manda la imagen de la pregunta; si esa
+   * no tiene, se usa la del formulario como reserva. La pantalla de datos y la
+   * de gracias usan siempre la del formulario.
+   */
+  const resolveBackground = (question) => {
+    if (form?.backgroundPerQuestion && question?.backgroundImage) {
+      return question.backgroundImage;
+    }
+    return formBackground;
+  };
+
+  const backgroundPropsFor = (image) => ({
+    $image: image || undefined,
+    $overlay: form?.backgroundOverlay !== false,
+    $hasBackground: Boolean(image),
+  });
+
+  // La pantalla de datos tambien puede tener la suya, con la misma reserva.
+  const introBackground =
+    form?.backgroundPerQuestion && form?.introBackgroundImage
+      ? form.introBackgroundImage
+      : formBackground;
+
+  const backgroundProps = backgroundPropsFor(formBackground);
 
   const introFields = (form?.introFields || []).filter((f) => f.enabled);
   const hasIntro = introFields.length > 0;
   const hasQuestions = form?.questions?.length > 0;
-  const [step, setStep] = useState(hasIntro ? "intro" : "questions");
+  // Ojo: el paso NO se puede fijar con useState(hasIntro ? ...), porque en el
+  // primer render el formulario aun no ha llegado de la API y hasIntro seria
+  // false para siempre. Se guarda solo el paso elegido a mano y, mientras no
+  // haya ninguno, se deduce del formulario ya cargado.
+  const [chosenStep, setStep] = useState(null);
   const [introData, setIntroData] = useState({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [direction, setDirection] = useState("forward");
   const [animKey, setAnimKey] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+
+  if (status === "loading") {
+    return (
+      <Page {...backgroundProps}>
+        <ThankYou>
+          <Spinner $size={28} />
+          <ThankText style={{ marginTop: 20 }}>Cargando formulario...</ThankText>
+        </ThankYou>
+      </Page>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <Page {...backgroundProps}>
+        <ThankYou>
+          <ThankTitle>No se pudo cargar</ThankTitle>
+          <ThankText>
+            {error?.isNetwork
+              ? "El servidor no responde. Intentalo de nuevo en un momento."
+              : error?.message}
+          </ThankText>
+          <SubmitButton onClick={() => window.location.reload()}>Reintentar</SubmitButton>
+        </ThankYou>
+      </Page>
+    );
+  }
 
   if (!form) {
     return (
-      <Page $bg="#6542F4">
+      <Page {...backgroundProps}>
         <ThankYou>
           <ThankTitle>Formulario no encontrado</ThankTitle>
+          <ThankText>Puede que se haya eliminado o que el enlace sea incorrecto.</ThankText>
           <SubmitButton onClick={() => navigate("/formularios")}>
             Volver
           </SubmitButton>
@@ -442,7 +555,7 @@ function FormView() {
 
   if (!hasIntro && !hasQuestions) {
     return (
-      <Page $bg="#6542F4">
+      <Page {...backgroundProps}>
         <ThankYou>
           <ThankTitle>Formulario vacio</ThankTitle>
           <ThankText>Este formulario no tiene preguntas todavia.</ThankText>
@@ -456,7 +569,7 @@ function FormView() {
 
   const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
   const isOnlyLetters = (v) => /^[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\s]+$/.test(v);
-  const isOnlyNumbers = (v) => /^[\d\-\+\(\)\s]+$/.test(v);
+  const isOnlyNumbers = (v) => /^[\d\-+()\s]+$/.test(v);
 
   const canStart = introFields
     .filter((f) => f.required)
@@ -469,32 +582,46 @@ function FormView() {
       return true;
     });
 
-  const handleStart = () => {
-    if (!canStart) return;
+  const buildRespondent = () => {
+    const respondent = {};
+    introFields.forEach((f) => {
+      respondent[f.id] = (introData[f.id] || "").trim();
+    });
+    return respondent;
+  };
+
+  const handleStart = async () => {
+    if (!canStart || submitting) return;
+
     if (hasQuestions) {
       setStep("questions");
-    } else {
-      const respondent = {};
-      introFields.forEach((f) => {
-        respondent[f.id] = (introData[f.id] || "").trim();
-      });
-      addResponse(id, {}, respondent);
-      setStep("submitted");
+      return;
     }
+
+    // Sin preguntas, pulsar "Comenzar" ya es el envio.
+    setSubmitting(true);
+    setSubmitError(null);
+
+    const result = await addResponse(id, {}, buildRespondent());
+    setSubmitting(false);
+
+    if (result.ok) setStep("submitted");
+    else setSubmitError(result.error);
   };
 
   const handleIntroChange = (field, value) => {
     if (field.type === "name" && value && !/^[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\s]*$/.test(value)) return;
-    if (field.type === "phone" && value && !/^[\d\-\+\(\)\s]*$/.test(value)) return;
+    if (field.type === "phone" && value && !/^[\d\-+()\s]*$/.test(value)) return;
     setIntroData((prev) => ({ ...prev, [field.id]: value }));
   };
 
   const nameField = introFields.find((f) => f.type === "name");
-  const respondentName = (nameField ? introData[nameField.id] : null) || Object.values(introData)[0] || "Respondedor";
+  const respondentName = (nameField ? introData[nameField.id] : null) || Object.values(introData)[0] || "";
+
+  const step = chosenStep ?? (hasIntro ? "intro" : "questions");
 
   const question = hasQuestions ? form.questions[currentIndex] : null;
   const progress = hasQuestions ? ((currentIndex + 1) / form.questions.length) * 100 : 0;
-  const bg = backgrounds[currentIndex % backgrounds.length];
   const currentAnswer = question ? answers[question.id] : undefined;
 
   const isAnswered = () => {
@@ -505,21 +632,27 @@ function FormView() {
 
   const canProceed = !question?.required || isAnswered();
 
-  const goNext = useCallback(() => {
-    if (!canProceed) return;
+  const goNext = async () => {
+    if (!canProceed || submitting) return;
+
     if (currentIndex < form.questions.length - 1) {
       setDirection("forward");
       setAnimKey((k) => k + 1);
       setCurrentIndex((i) => i + 1);
-    } else {
-      const respondent = {};
-      introFields.forEach((f) => {
-        respondent[f.id] = (introData[f.id] || "").trim();
-      });
-      addResponse(id, answers, respondent);
-      setStep("submitted");
+      return;
     }
-  }, [canProceed, currentIndex, form.questions.length, answers, introData]);
+
+    // Ultima pregunta: se envia. Aqui si hay que esperar la respuesta del
+    // servidor, porque quien responde tiene que saber si su envio llego.
+    setSubmitting(true);
+    setSubmitError(null);
+
+    const result = await addResponse(id, answers, buildRespondent());
+    setSubmitting(false);
+
+    if (result.ok) setStep("submitted");
+    else setSubmitError(result.error);
+  };
 
   const goPrev = () => {
     if (currentIndex > 0) {
@@ -561,7 +694,7 @@ function FormView() {
   // --- INTRO SCREEN ---
   if (step === "intro") {
     return (
-      <Page $bg="#6542F4" onKeyDown={handleKeyDown} tabIndex={0}>
+      <Page {...backgroundPropsFor(introBackground)} onKeyDown={handleKeyDown} tabIndex={0}>
         <TopBar>
           <FormTitleBar>{form.title}</FormTitleBar>
           <CloseButton onClick={() => navigate(`/formularios/${id}/editar`)}>
@@ -596,9 +729,21 @@ function FormView() {
               </IntroForm>
             )}
 
-            <StartButton onClick={handleStart} disabled={!canStart}>
-              Comenzar <FiArrowRight size={16} />
+            <StartButton onClick={handleStart} disabled={!canStart || submitting}>
+              {submitting ? "Enviando..." : "Comenzar"}
+              {submitting ? <Spinner $size={16} $color="currentColor" /> : <FiArrowRight size={16} />}
             </StartButton>
+
+            {submitError && (
+              <SubmitError>
+                <FiAlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>
+                  {submitError.isNetwork
+                    ? "No se pudo enviar: sin conexion con el servidor. Tus respuestas siguen aqui, vuelve a intentarlo."
+                    : submitError.message}
+                </span>
+              </SubmitError>
+            )}
           </IntroCard>
         </QuestionContainer>
       </Page>
@@ -608,7 +753,7 @@ function FormView() {
   // --- SUBMITTED ---
   if (step === "submitted") {
     return (
-      <Page $bg="#059669">
+      <Page>
         <TopBar>
           <FormTitleBar>{form.title}</FormTitleBar>
           <CloseButton onClick={() => navigate("/formularios")}>
@@ -617,7 +762,11 @@ function FormView() {
         </TopBar>
         <ThankYou>
           <CheckCircle><FiCheck size={36} /></CheckCircle>
-          <ThankTitle>Gracias, {respondentName.split(" ")[0]}</ThankTitle>
+          <ThankTitle>
+            {respondentName.trim()
+              ? `Gracias, ${respondentName.trim().split(" ")[0]}`
+              : "Gracias"}
+          </ThankTitle>
           <ThankText>Tus respuestas han sido registradas correctamente.</ThankText>
           <SubmitButton onClick={() => navigate("/formularios")}>
             Volver al inicio
@@ -629,7 +778,7 @@ function FormView() {
 
   // --- QUESTIONS ---
   return (
-    <Page $bg={bg} onKeyDown={handleKeyDown} tabIndex={0}>
+    <Page {...backgroundPropsFor(resolveBackground(question))} onKeyDown={handleKeyDown} tabIndex={0}>
       <ProgressBar style={{ width: `${progress}%` }} />
 
       <TopBar>
@@ -719,6 +868,16 @@ function FormView() {
               })}
             </OptionsGrid>
           )}
+          {submitError && (
+            <SubmitError>
+              <FiAlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                {submitError.isNetwork
+                  ? "No se pudo enviar: sin conexion con el servidor. Tus respuestas siguen aqui, vuelve a intentarlo."
+                  : submitError.message}
+              </span>
+            </SubmitError>
+          )}
         </QuestionCard>
       </QuestionContainer>
 
@@ -733,8 +892,9 @@ function FormView() {
           </NavButton>
 
           {currentIndex === form.questions.length - 1 ? (
-            <SubmitButton onClick={goNext} disabled={!canProceed}>
-              Enviar <FiCheck size={16} />
+            <SubmitButton onClick={goNext} disabled={!canProceed || submitting}>
+              {submitting ? "Enviando..." : "Enviar"}
+              {submitting ? <Spinner $size={16} $color="currentColor" /> : <FiCheck size={16} />}
             </SubmitButton>
           ) : (
             <NavButton onClick={goNext} disabled={!canProceed}>
