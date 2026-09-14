@@ -1,0 +1,10 @@
+bin/
+obj/
+
+# Configuracion local: aqui va la cadena de conexion cuando entre SQL Server.
+appsettings.Local.json
+*.user
+
+# Imagenes de fondo que suben los usuarios. Son datos, no codigo:
+# no deben viajar en el repositorio.
+wwwroot/uploads/

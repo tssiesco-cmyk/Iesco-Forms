@@ -1,0 +1,118 @@
+namespace IescoForms.Api.Models;
+
+/// <summary>
+/// Estados posibles de un formulario. Coinciden con los textos que muestra el
+/// frontend, por eso se serializan tal cual como cadena.
+/// </summary>
+public static class FormStatus
+{
+    public const string Draft = "Borrador";
+    public const string Active = "Activo";
+}
+
+/// <summary>Tipos de pregunta soportados por el editor.</summary>
+public static class QuestionType
+{
+    public const string ShortText = "short_text";
+    public const string LongText = "long_text";
+    public const string SingleChoice = "single_choice";
+    public const string MultipleChoice = "multiple_choice";
+
+    public static bool IsValid(string? type) =>
+        type is ShortText or LongText or SingleChoice or MultipleChoice;
+
+    public static bool HasOptions(string type) =>
+        type is SingleChoice or MultipleChoice;
+}
+
+public class Form
+{
+    public string Id { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Status { get; set; } = FormStatus.Draft;
+
+    /// <summary>
+    /// Quien lo creo. Un Editor solo ve y toca los suyos; un Administrador los ve
+    /// todos. Vacio significa "sin dueno" y lo ve cualquiera con sesion.
+    /// </summary>
+    public string OwnerId { get; set; } = string.Empty;
+
+    /// <summary>Fecha de creacion en formato yyyy-MM-dd, como la espera el frontend.</summary>
+    public string CreatedAt { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Ruta publica de la imagen de fondo para quien responde, o vacio si no tiene.
+    /// </summary>
+    public string BackgroundImage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Velo oscuro sobre la imagen. Va activado por defecto: sin el, el texto de
+    /// las preguntas se pierde sobre casi cualquier foto.
+    /// </summary>
+    public bool BackgroundOverlay { get; set; } = true;
+
+    /// <summary>
+    /// Si cada pregunta puede tener su propia imagen. Cuando esta apagado, todas
+    /// usan la del formulario; cuando esta encendido, la de la pregunta manda y
+    /// la del formulario queda como reserva para las que no tengan.
+    /// </summary>
+    public bool BackgroundPerQuestion { get; set; }
+
+    /// <summary>
+    /// Imagen propia de la pantalla de datos del respondedor. Como las de las
+    /// preguntas, solo se usa con BackgroundPerQuestion activado.
+    /// </summary>
+    public string IntroBackgroundImage { get; set; } = string.Empty;
+
+    /// <summary>Datos que se piden antes de empezar a responder. Puede ir vacio.</summary>
+    public List<IntroField> IntroFields { get; set; } = [];
+
+    public List<Question> Questions { get; set; } = [];
+
+    /// <summary>Solo tiene valor mientras el formulario esta en la papelera.</summary>
+    public DateTimeOffset? TrashedAt { get; set; }
+
+    /// <summary>
+    /// Cuantas respuestas lleva. Es un valor derivado que el almacen recalcula al
+    /// leer, no algo que se guarde: evita que el listado tenga que pedir las
+    /// respuestas de cada formulario por separado.
+    /// </summary>
+    public int ResponseCount { get; set; }
+}
+
+public class Question
+{
+    public string Id { get; set; } = string.Empty;
+    public string Type { get; set; } = QuestionType.ShortText;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public bool Required { get; set; }
+
+    /// <summary>
+    /// Imagen propia de esta pregunta. Solo se usa si el formulario tiene
+    /// activado BackgroundPerQuestion.
+    /// </summary>
+    public string BackgroundImage { get; set; } = string.Empty;
+
+    public List<QuestionOption> Options { get; set; } = [];
+}
+
+public class QuestionOption
+{
+    public string Id { get; set; } = string.Empty;
+    public string Text { get; set; } = string.Empty;
+}
+
+public class IntroField
+{
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>name | phone | email | text</summary>
+    public string Type { get; set; } = "text";
+
+    public string Label { get; set; } = string.Empty;
+    public string Placeholder { get; set; } = string.Empty;
+    public bool Required { get; set; }
+    public bool Enabled { get; set; } = true;
+}
