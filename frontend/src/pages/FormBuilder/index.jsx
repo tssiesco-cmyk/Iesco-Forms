@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import {
   FiArrowLeft, FiPlus, FiTrash2, FiType, FiAlignLeft,
   FiCircle, FiCheckSquare, FiChevronUp, FiChevronDown,
   FiEye, FiX, FiBarChart2, FiUser, FiToggleLeft, FiToggleRight, FiMail, FiPhone,
-  FiSend, FiRotateCcw, FiCheck, FiAlertCircle, FiImage, FiUpload
+  FiSend, FiRotateCcw, FiCheck, FiAlertCircle, FiImage, FiUpload,
+  FiCopy, FiChevronsLeft, FiChevronsRight
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import Button from "../../components/atoms/Button";
@@ -17,16 +18,41 @@ const Page = styled.div`
   display: flex;
   height: 100vh;
   background: ${({ theme }) => theme.colors.background};
+  /* El panel se cierra saliendose hacia la derecha; sin esto asomaria una barra
+     de scroll horizontal mientras dura la animacion. */
+  overflow: hidden;
 `;
 
-/* --- LEFT PANEL --- */
+/* --- LEFT PANEL: titulo, fondo y datos del usuario --- */
 const LeftPanel = styled.aside`
   width: 320px;
+  flex-shrink: 0;
   background: ${({ theme }) => theme.colors.surface};
   border-right: 1px solid ${({ theme }) => theme.colors.border};
   display: flex;
   flex-direction: column;
   overflow: hidden;
+`;
+
+/* --- SIDE PANEL: solo las preguntas, a la derecha del editor --- */
+const SidePanel = styled.aside`
+  width: 320px;
+  flex-shrink: 0;
+  background: ${({ theme }) => theme.colors.surface};
+  border-left: 1px solid ${({ theme }) => theme.colors.border};
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  /* Al cerrarse se sale del flujo en vez de encogerse: asi el contenido de
+     dentro no se reacomoda en cada frame mientras se desliza. */
+  margin-right: ${({ $open }) => ($open ? "0" : "-320px")};
+  transform: translateX(${({ $open }) => ($open ? "0" : "100%")});
+  transition: margin-right 0.22s ease, transform 0.22s ease;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
 `;
 
 const PanelHeader = styled.div`
@@ -48,8 +74,18 @@ const BackButton = styled.button`
   &:hover { background: ${({ theme }) => theme.colors.surfaceAlt}; }
 `;
 
-const FormTitle = styled.input`
+// Titulo y subtitulo comparten columna para que el boton de volver quede
+// centrado contra el bloque entero y no contra la primera linea.
+const HeaderTitles = styled.div`
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+`;
+
+const FormTitle = styled.input`
+  width: 100%;
   font-size: ${({ theme }) => theme.fontSizes.lg};
   font-weight: ${({ theme }) => theme.fontWeights.semibold};
   border: none;
@@ -58,13 +94,119 @@ const FormTitle = styled.input`
   &::placeholder { color: ${({ theme }) => theme.colors.textMuted}; }
 `;
 
+const FormSubtitle = styled.input`
+  width: 100%;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  border: none;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  &::placeholder { color: ${({ theme }) => theme.colors.textMuted}; }
+`;
+
+/* --- Formato de la respuesta (mayusculas / minusculas) --- */
+const CaseSection = styled.div`
+  padding: 12px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+`;
+
+const CaseTarget = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin: 0 6px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const CaseGroup = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 0 6px;
+`;
+
+const CaseButton = styled.button`
+  padding: 8px 4px;
+  border-radius: ${({ theme }) => theme.radii.md};
+  border: 1px solid ${({ $active, theme }) => $active ? theme.colors.primary : theme.colors.border};
+  background: ${({ $active, theme }) => $active ? theme.colors.primaryLight : theme.colors.surface};
+  color: ${({ $active, theme }) => $active ? theme.colors.primary : theme.colors.textSecondary};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  font-weight: ${({ $active, theme }) => $active ? theme.fontWeights.semibold : theme.fontWeights.normal};
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary};
+    color: ${({ theme }) => theme.colors.primary};
+  }
+`;
+
+const QuestionsHeader = styled.div`
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: ${({ theme }) => theme.fontSizes.lg};
+  font-weight: ${({ theme }) => theme.fontWeights.semibold};
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const QuestionsCount = styled.span`
+  margin-left: auto;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  font-weight: ${({ theme }) => theme.fontWeights.normal};
+  color: ${({ theme }) => theme.colors.textMuted};
+`;
+
 const QuestionList = styled.div`
   flex: 1;
   overflow-y: auto;
   padding: 12px;
 `;
 
-const QuestionItem = styled.button`
+const QuestionTypeIcon = styled.span`
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: ${({ theme }) => theme.colors.textMuted};
+`;
+
+const QuestionActions = styled.div`
+  display: none;
+  gap: 2px;
+  flex-shrink: 0;
+`;
+
+const QuestionActionBtn = styled.button`
+  width: 24px;
+  height: 24px;
+  border-radius: ${({ theme }) => theme.radii.sm};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: ${({ theme }) => theme.colors.textMuted};
+
+  &:hover {
+    background: ${({ $danger, theme }) => $danger ? theme.colors.dangerBg : theme.colors.surface};
+    color: ${({ $danger, theme }) => $danger ? theme.colors.danger : theme.colors.text};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+`;
+
+// Duplicar y eliminar reemplazan al icono de tipo en vez de sumarse a el, para
+// que la fila no cambie de ancho al pasar el mouse.
+const showRowActions = css`
+  ${QuestionTypeIcon} { display: none; }
+  ${QuestionActions} { display: flex; }
+`;
+
+const QuestionItem = styled.div`
   width: 100%;
   padding: 12px 14px;
   border-radius: ${({ theme }) => theme.radii.md};
@@ -73,14 +215,27 @@ const QuestionItem = styled.button`
   gap: 10px;
   text-align: left;
   margin-bottom: 4px;
-  transition: all 0.1s ease;
+  cursor: ${({ $dragging }) => $dragging ? "grabbing" : "grab"};
+  opacity: ${({ $dragging }) => $dragging ? 0.4 : 1};
+  transition: background 0.1s ease, opacity 0.1s ease;
   background: ${({ $active, theme }) => $active ? theme.colors.primaryLight : "transparent"};
   color: ${({ $active, theme }) => $active ? theme.colors.primary : theme.colors.text};
   font-weight: ${({ $active, theme }) => $active ? theme.fontWeights.medium : theme.fontWeights.normal};
 
+  /* La linea indica de que lado va a caer la pregunta que se esta arrastrando. */
+  box-shadow: ${({ $dropLine, theme }) =>
+    $dropLine === "before" ? `inset 0 2px 0 ${theme.colors.primary}`
+      : $dropLine === "after" ? `inset 0 -2px 0 ${theme.colors.primary}`
+        : "none"};
+
   &:hover {
     background: ${({ $active, theme }) => $active ? theme.colors.primaryLight : theme.colors.surfaceAlt};
   }
+
+  &:hover, &:focus-within { ${showRowActions} }
+
+  /* En la pregunta abierta se quedan fijas: es la que mas se va a tocar. */
+  ${({ $active }) => $active && showRowActions}
 `;
 
 const QuestionNumber = styled.span`
@@ -191,6 +346,22 @@ const ToolbarActions = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
+`;
+
+const PanelToggle = styled.button`
+  width: 32px;
+  height: 32px;
+  border-radius: ${({ theme }) => theme.radii.md};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: ${({ theme }) => theme.colors.textSecondary};
+
+  &:hover {
+    background: ${({ theme }) => theme.colors.surfaceAlt};
+    color: ${({ theme }) => theme.colors.text};
+  }
 `;
 
 const EditorContent = styled.div`
@@ -635,6 +806,16 @@ const typeLabels = {
   multiple_choice: "Opcion multiple",
 };
 
+// El formato solo cambia algo donde se escribe libremente; en las de opciones
+// el texto lo fija quien arma el formulario, no quien responde.
+const TEXT_TYPES = ["short_text", "long_text"];
+
+const caseOptions = [
+  { value: "upper", label: "MAYUSCULA" },
+  { value: "normal", label: "Normal" },
+  { value: "lower", label: "minuscula" },
+];
+
 const typeIcons = {
   short_text: <FiType size={14} />,
   long_text: <FiAlignLeft size={14} />,
@@ -651,13 +832,19 @@ function FormBuilder() {
     setBackgroundPerQuestion, uploadQuestionBackground, removeQuestionBackground,
     uploadIntroBackground, removeIntroBackground,
     updateForm, addQuestion, updateQuestion,
-    deleteQuestion, reorderQuestions, addOption, updateOption, deleteOption,
+    deleteQuestion, duplicateQuestion, reorderQuestions, addOption, updateOption, deleteOption,
     updateIntroField, addIntroField, removeIntroField
   } = useForms();
 
   const form = getForm(id);
   const [selectedQuestionId, setSelectedQuestionId] = useState(null);
   const [addingType, setAddingType] = useState(null);
+  const [duplicatingId, setDuplicatingId] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(true);
+  // Solo el indice de donde salio la pregunta y el de la fila que se sobrevuela:
+  // con eso alcanza para pintar la linea y para llamar a reorderQuestions.
+  const [dragIndex, setDragIndex] = useState(null);
+  const [overIndex, setOverIndex] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadingQuestion, setUploadingQuestion] = useState(false);
   const [uploadingIntro, setUploadingIntro] = useState(false);
@@ -753,6 +940,57 @@ function FormBuilder() {
   // derivacion de arriba cae sola sobre la primera que quede.
   const handleDeleteQuestion = (qId) => deleteQuestion(id, qId);
 
+  const handleDuplicateQuestion = async (qId) => {
+    if (duplicatingId) return;
+
+    setDuplicatingId(qId);
+    const newId = await duplicateQuestion(id, qId);
+    setDuplicatingId(null);
+
+    // La copia queda justo debajo de la original y se abre para editarla.
+    if (newId) setActiveQuestionId(newId);
+  };
+
+  // --- Arrastrar para reordenar ---
+  // El movimiento real lo hace reorderQuestions, el mismo que usan las flechas
+  // del editor; aqui solo se traduce el gesto a un par de indices.
+
+  const handleDragStart = (index) => (event) => {
+    event.dataTransfer.effectAllowed = "move";
+    // Firefox no arranca el arrastre si no se escribe algo en dataTransfer.
+    event.dataTransfer.setData("text/plain", String(index));
+    setDragIndex(index);
+  };
+
+  const handleDragOver = (index) => (event) => {
+    // Sin preventDefault el navegador no acepta la fila como destino valido.
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (overIndex !== index) setOverIndex(index);
+  };
+
+  const handleDrop = (index) => (event) => {
+    event.preventDefault();
+    if (dragIndex !== null && dragIndex !== index) {
+      reorderQuestions(id, dragIndex, index);
+    }
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
+  // Tambien corre cuando se suelta fuera de la lista, asi que es el que
+  // garantiza que no quede una linea dibujada para siempre.
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
+  const dropLineFor = (index) => {
+    if (dragIndex === null || dragIndex === index || overIndex !== index) return null;
+    // Bajando, la pregunta cae debajo de la sobrevolada; subiendo, encima.
+    return dragIndex < index ? "after" : "before";
+  };
+
   const handleMoveUp = () => {
     if (activeIndex > 0) {
       reorderQuestions(id, activeIndex, activeIndex - 1);
@@ -767,7 +1005,7 @@ function FormBuilder() {
 
   const isPublished = form.status === "Activo";
   // Un formulario vacio no se puede publicar: necesita al menos una pregunta
-  // o un campo de datos del respondedor activo.
+  // o un campo de datos del usuario activo.
   const canPublish =
     form.questions.length > 0 || form.introFields.some((f) => f.enabled);
 
@@ -783,16 +1021,26 @@ function FormBuilder() {
 
   return (
     <Page>
+
       <LeftPanel>
         <PanelHeader>
           <BackButton onClick={() => { flushPendingWrites(); navigate("/formularios"); }}>
             <FiArrowLeft size={18} />
           </BackButton>
-          <FormTitle
-            value={form.title}
-            onChange={(e) => updateForm(id, { title: e.target.value })}
-            placeholder="Titulo del formulario"
-          />
+          <HeaderTitles>
+            <FormTitle
+              value={form.title}
+              onChange={(e) => updateForm(id, { title: e.target.value })}
+              placeholder="Titulo del formulario"
+              aria-label="Titulo del formulario"
+            />
+            <FormSubtitle
+              value={form.description || ""}
+              onChange={(e) => updateForm(id, { description: e.target.value })}
+              placeholder="Subtitulo (opcional)"
+              aria-label="Subtitulo del formulario"
+            />
+          </HeaderTitles>
         </PanelHeader>
 
         <BackgroundSection>
@@ -854,7 +1102,7 @@ function FormBuilder() {
 
         <IntroSection>
           <IntroSectionTitle>
-            <FiUser size={12} /> Datos del respondedor
+            <FiUser size={12} /> Datos del usuario
           </IntroSectionTitle>
           {form.introFields.length === 0 && (
             <IntroEmpty>
@@ -949,41 +1197,51 @@ function FormBuilder() {
           </div>
         </IntroSection>
 
-        <QuestionList>
-          {form.questions.map((q, i) => (
-            <QuestionItem
-              key={q.id}
-              $active={q.id === activeQuestionId}
-              onClick={() => setActiveQuestionId(q.id)}
-            >
-              <QuestionNumber $active={q.id === activeQuestionId}>
-                {i + 1}
-              </QuestionNumber>
-              <QuestionLabel>
-                {q.title || "Pregunta sin titulo"}
-              </QuestionLabel>
-              {typeIcons[q.type]}
-            </QuestionItem>
-          ))}
-        </QuestionList>
+        <CaseSection>
+          <IntroSectionTitle>
+            <FiType size={12} /> Formato de la respuesta
+          </IntroSectionTitle>
 
-        <AddSection>
-          <AddTitle>Agregar pregunta</AddTitle>
-          <AddGrid>
-            <AddButton onClick={() => handleAddQuestion("short_text")} disabled={Boolean(addingType)}>
-              {addingType === "short_text" ? <Spinner $size={14} /> : <FiType size={14} />} Texto corto
-            </AddButton>
-            <AddButton onClick={() => handleAddQuestion("long_text")} disabled={Boolean(addingType)}>
-              {addingType === "long_text" ? <Spinner $size={14} /> : <FiAlignLeft size={14} />} Texto largo
-            </AddButton>
-            <AddButton onClick={() => handleAddQuestion("single_choice")} disabled={Boolean(addingType)}>
-              {addingType === "single_choice" ? <Spinner $size={14} /> : <FiCircle size={14} />} Opcion unica
-            </AddButton>
-            <AddButton onClick={() => handleAddQuestion("multiple_choice")} disabled={Boolean(addingType)}>
-              {addingType === "multiple_choice" ? <Spinner $size={14} /> : <FiCheckSquare size={14} />} Multiple
-            </AddButton>
-          </AddGrid>
-        </AddSection>
+          {!activeQuestion ? (
+            <IntroEmpty>
+              Elige una pregunta en el panel de la derecha para fijar su formato.
+            </IntroEmpty>
+          ) : !TEXT_TYPES.includes(activeQuestion.type) ? (
+            <IntroEmpty>
+              Solo aplica a las preguntas de texto. La que tienes abierta es de opciones.
+            </IntroEmpty>
+          ) : (
+            <>
+              <CaseTarget>
+                Pregunta {activeIndex + 1}: {activeQuestion.title || "Sin titulo"}
+              </CaseTarget>
+
+              <CaseGroup role="group" aria-label="Formato de la respuesta">
+                {caseOptions.map((option) => {
+                  // Las preguntas creadas antes de esta opcion no traen el campo.
+                  const current = activeQuestion.textCase || "normal";
+
+                  return (
+                    <CaseButton
+                      key={option.value}
+                      $active={current === option.value}
+                      aria-pressed={current === option.value}
+                      onClick={() =>
+                        updateQuestion(id, activeQuestion.id, { textCase: option.value })
+                      }
+                    >
+                      {option.label}
+                    </CaseButton>
+                  );
+                })}
+              </CaseGroup>
+
+              <BackgroundHint>
+                Manda sobre el Bloq Mayus: la respuesta se convierte sola al escribirla.
+              </BackgroundHint>
+            </>
+          )}
+        </CaseSection>
       </LeftPanel>
 
       <MainEditor>
@@ -1032,6 +1290,15 @@ function FormBuilder() {
                 <FiSend size={14} /> Publicar
               </Button>
             )}
+
+            <PanelToggle
+              onClick={() => setPanelOpen((open) => !open)}
+              title={panelOpen ? "Ocultar panel de preguntas" : "Mostrar panel de preguntas"}
+              aria-label={panelOpen ? "Ocultar panel de preguntas" : "Mostrar panel de preguntas"}
+              aria-expanded={panelOpen}
+            >
+              {panelOpen ? <FiChevronsRight size={18} /> : <FiChevronsLeft size={18} />}
+            </PanelToggle>
           </ToolbarActions>
         </EditorToolbar>
 
@@ -1041,7 +1308,7 @@ function FormBuilder() {
               <EmptyState>
                 <EmptyIcon><FiPlus size={24} /></EmptyIcon>
                 <h2>Agrega tu primera pregunta</h2>
-                <p>Usa el panel izquierdo para agregar preguntas a tu formulario.</p>
+                <p>Usa el panel derecho para agregar preguntas a tu formulario.</p>
               </EmptyState>
             ) : (
               <QEditor>
@@ -1191,6 +1458,93 @@ function FormBuilder() {
           </EditorCard>
         </EditorContent>
       </MainEditor>
+
+      <SidePanel $open={panelOpen}>
+        <QuestionsHeader>
+          Preguntas
+          <QuestionsCount>{form.questions.length}</QuestionsCount>
+        </QuestionsHeader>
+
+        <QuestionList>
+          {form.questions.map((q, i) => (
+            <QuestionItem
+              key={q.id}
+              draggable
+              tabIndex={0}
+              aria-current={q.id === activeQuestionId || undefined}
+              $active={q.id === activeQuestionId}
+              $dragging={dragIndex === i}
+              $dropLine={dropLineFor(i)}
+              onClick={() => setActiveQuestionId(q.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setActiveQuestionId(q.id);
+                }
+              }}
+              onDragStart={handleDragStart(i)}
+              onDragOver={handleDragOver(i)}
+              onDrop={handleDrop(i)}
+              onDragEnd={handleDragEnd}
+            >
+              <QuestionNumber $active={q.id === activeQuestionId}>
+                {i + 1}
+              </QuestionNumber>
+              <QuestionLabel>
+                {q.title || "Pregunta sin titulo"}
+              </QuestionLabel>
+
+              <QuestionTypeIcon>{typeIcons[q.type]}</QuestionTypeIcon>
+
+              <QuestionActions>
+                <QuestionActionBtn
+                  title="Duplicar pregunta"
+                  aria-label="Duplicar pregunta"
+                  disabled={Boolean(duplicatingId)}
+                  onClick={(event) => {
+                    // Sin esto el clic tambien abriria la pregunta de la fila.
+                    event.stopPropagation();
+                    handleDuplicateQuestion(q.id);
+                  }}
+                >
+                  {duplicatingId === q.id ? <Spinner $size={12} /> : <FiCopy size={13} />}
+                </QuestionActionBtn>
+
+                <QuestionActionBtn
+                  $danger
+                  title="Eliminar pregunta"
+                  aria-label="Eliminar pregunta"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleDeleteQuestion(q.id);
+                  }}
+                >
+                  <FiTrash2 size={13} />
+                </QuestionActionBtn>
+              </QuestionActions>
+            </QuestionItem>
+          ))}
+        </QuestionList>
+
+        <AddSection>
+          <AddTitle>Agregar pregunta</AddTitle>
+          <AddGrid>
+            <AddButton onClick={() => handleAddQuestion("short_text")} disabled={Boolean(addingType)}>
+              {addingType === "short_text" ? <Spinner $size={14} /> : <FiType size={14} />} Texto corto
+            </AddButton>
+            <AddButton onClick={() => handleAddQuestion("long_text")} disabled={Boolean(addingType)}>
+              {addingType === "long_text" ? <Spinner $size={14} /> : <FiAlignLeft size={14} />} Texto largo
+            </AddButton>
+            <AddButton onClick={() => handleAddQuestion("single_choice")} disabled={Boolean(addingType)}>
+              {addingType === "single_choice" ? <Spinner $size={14} /> : <FiCircle size={14} />} Opcion unica
+            </AddButton>
+            <AddButton onClick={() => handleAddQuestion("multiple_choice")} disabled={Boolean(addingType)}>
+              {addingType === "multiple_choice" ? <Spinner $size={14} /> : <FiCheckSquare size={14} />} Multiple
+            </AddButton>
+          </AddGrid>
+        </AddSection>
+      </SidePanel>
+
     </Page>
   );
 }

@@ -46,7 +46,15 @@ public interface IFormStore
 
     // --- Preguntas ---
     Question? AddQuestion(string formId, string type);
-    Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required);
+
+    /// <summary>
+    /// Copia una pregunta con ids nuevos (el suyo y los de sus opciones) y la
+    /// inserta justo despues de la original. La imagen de fondo no se copia a
+    /// proposito: el archivo seria el mismo en disco y al borrar una de las dos
+    /// copias la otra se quedaria apuntando a una ruta que ya no existe.
+    /// </summary>
+    Question? DuplicateQuestion(string formId, string questionId);
+    Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase);
     bool DeleteQuestion(string formId, string questionId);
     bool ReorderQuestions(string formId, int fromIndex, int toIndex);
 

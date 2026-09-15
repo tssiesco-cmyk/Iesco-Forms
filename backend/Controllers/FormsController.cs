@@ -158,13 +158,35 @@ public class FormsController(
         return Ok(question);
     }
 
+    [HttpPost("{id}/questions/{questionId}/duplicate")]
+    public ActionResult<Question> DuplicateQuestion(string id, string questionId)
+    {
+        var form = Accessible(id);
+        if (form is null) return FormNotFound(id);
+
+        var question = store.DuplicateQuestion(id, questionId);
+        if (question is null) return QuestionNotFound(id, questionId);
+
+        Notify(form, NotificationType.FormUpdated);
+        return Ok(question);
+    }
+
     [HttpPatch("{id}/questions/{questionId}")]
     public ActionResult<Question> UpdateQuestion(string id, string questionId, [FromBody] UpdateQuestionRequest request)
     {
         var form = Accessible(id);
         if (form is null) return FormNotFound(id);
 
-        var question = store.UpdateQuestion(id, questionId, request.Title, request.Description, request.Required);
+        // Null significa "no lo toques"; cualquier otro valor tiene que ser uno
+        // de los tres conocidos, para que no entre basura en el modelo.
+        if (request.TextCase is not null && !QuestionTextCase.IsValid(request.TextCase))
+        {
+            ModelState.AddModelError(nameof(request.TextCase),
+                $"Formato de texto no valido: '{request.TextCase}'.");
+            return ValidationProblem(ModelState);
+        }
+
+        var question = store.UpdateQuestion(id, questionId, request.Title, request.Description, request.Required, request.TextCase);
         if (question is null) return QuestionNotFound(id, questionId);
 
         Notify(form, NotificationType.FormUpdated);

@@ -460,6 +460,16 @@ const StartButton = styled.button`
   &:disabled { opacity: 0.4; cursor: default; }
 `;
 
+// El formato elegido en el constructor manda sobre el teclado: da igual como
+// tenga el Bloq Mayus quien responde, el texto se convierte igual. Se aplica al
+// guardar la respuesta, no con CSS, para que lo que se ve y lo que se envia
+// sean lo mismo.
+function applyTextCase(value, textCase) {
+  if (textCase === "upper") return value.toLocaleUpperCase();
+  if (textCase === "lower") return value.toLocaleLowerCase();
+  return value;
+}
+
 function FormView() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -663,7 +673,10 @@ function FormView() {
   };
 
   const handleTextChange = (value) => {
-    setAnswers((prev) => ({ ...prev, [question.id]: value }));
+    setAnswers((prev) => ({
+      ...prev,
+      [question.id]: applyTextCase(value, question.textCase),
+    }));
   };
 
   const handleSingleSelect = (optionId) => {

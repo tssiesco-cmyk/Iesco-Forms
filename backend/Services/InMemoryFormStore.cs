@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using IescoForms.Api.Models;
 
@@ -278,7 +279,37 @@ public class InMemoryFormStore : IFormStore
         }
     }
 
-    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required)
+    public Question? DuplicateQuestion(string formId, string questionId)
+    {
+        lock (_gate)
+        {
+            var form = _forms.FirstOrDefault(f => f.Id == formId);
+            if (form is null) return null;
+
+            var index = form.Questions.FindIndex(q => q.Id == questionId);
+            if (index < 0) return null;
+
+            var original = form.Questions[index];
+            var copy = new Question
+            {
+                Id = NewId(),
+                Type = original.Type,
+                Title = original.Title,
+                Description = original.Description,
+                Required = original.Required,
+                TextCase = original.TextCase,
+                // BackgroundImage queda vacia a proposito: ver el porque en IFormStore.
+                Options = original.Options
+                    .Select(o => new QuestionOption { Id = NewId(), Text = o.Text })
+                    .ToList(),
+            };
+
+            form.Questions.Insert(index + 1, copy);
+            return copy;
+        }
+    }
+
+    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase)
     {
         lock (_gate)
         {
@@ -288,6 +319,7 @@ public class InMemoryFormStore : IFormStore
             if (title is not null) question.Title = title;
             if (description is not null) question.Description = description;
             if (required.HasValue) question.Required = required.Value;
+            if (textCase is not null) question.TextCase = textCase;
 
             return question;
         }
@@ -449,7 +481,8 @@ public class InMemoryFormStore : IFormStore
         lock (_gate)
         {
             // Solo se aceptan respuestas de formularios vivos; uno en la papelera no recibe.
-            if (!_forms.Any(f => f.Id == formId)) return null;
+            var form = _forms.FirstOrDefault(f => f.Id == formId);
+            if (form is null) return null;
 
             var response = new FormResponse
             {
@@ -457,14 +490,39 @@ public class InMemoryFormStore : IFormStore
                 FormId = formId,
                 SubmittedAt = DateTimeOffset.UtcNow,
                 Respondent = respondent ?? [],
-                // Se clona cada valor: el JsonNode que llega en la peticion pertenece
-                // al arbol del cuerpo y no se puede reutilizar una vez cerrado.
-                Answers = answers?.ToDictionary(kv => kv.Key, kv => kv.Value?.DeepClone()) ?? [],
+                Answers = answers?.ToDictionary(kv => kv.Key, kv => NormalizeAnswer(form, kv.Key, kv.Value)) ?? [],
             };
 
             _responses.Insert(0, response);
             return response;
         }
+    }
+
+    /// <summary>
+    /// Aplica el formato de texto elegido para la pregunta. El navegador ya lo
+    /// hace mientras se escribe, pero se repite aqui porque es lo unico que
+    /// garantiza el formato venga la respuesta de donde venga.
+    /// </summary>
+    private static JsonNode? NormalizeAnswer(Form form, string questionId, JsonNode? value)
+    {
+        // Se clona siempre: el JsonNode que llega en la peticion pertenece al
+        // arbol del cuerpo y no se puede reutilizar una vez cerrado.
+        var clone = value?.DeepClone();
+        if (clone is null) return null;
+
+        var question = form.Questions.FirstOrDefault(q => q.Id == questionId);
+        if (question is null) return clone;
+        if (!QuestionType.IsText(question.Type)) return clone;
+        if (question.TextCase == QuestionTextCase.Normal) return clone;
+
+        // Las respuestas de texto son cadenas; las de opciones son ids y no se
+        // tocan aunque la pregunta arrastrase un formato de cuando era de texto.
+        if (clone.GetValueKind() != JsonValueKind.String) return clone;
+
+        var text = clone.GetValue<string>();
+        return JsonValue.Create(question.TextCase == QuestionTextCase.Upper
+            ? text.ToUpperInvariant()
+            : text.ToLowerInvariant());
     }
 
     // --- Plantillas ---

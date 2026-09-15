@@ -23,6 +23,25 @@ public static class QuestionType
 
     public static bool HasOptions(string type) =>
         type is SingleChoice or MultipleChoice;
+
+    /// <summary>Tipos donde quien responde escribe libremente.</summary>
+    public static bool IsText(string type) =>
+        type is ShortText or LongText;
+}
+
+/// <summary>
+/// Como se guarda lo que escribe quien responde. Manda sobre el teclado: da
+/// igual como tenga el Bloq Mayus, el texto se convierte al enviarse.
+/// Solo tiene efecto en las preguntas de texto.
+/// </summary>
+public static class QuestionTextCase
+{
+    public const string Normal = "normal";
+    public const string Upper = "upper";
+    public const string Lower = "lower";
+
+    public static bool IsValid(string? value) =>
+        value is Normal or Upper or Lower;
 }
 
 public class Form
@@ -88,6 +107,9 @@ public class Question
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public bool Required { get; set; }
+
+    /// <summary>normal, upper o lower. Ver <see cref="QuestionTextCase"/>.</summary>
+    public string TextCase { get; set; } = QuestionTextCase.Normal;
 
     /// <summary>
     /// Imagen propia de esta pregunta. Solo se usa si el formulario tiene

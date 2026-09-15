@@ -348,11 +348,13 @@ export function FormProvider({ children }) {
       questions: form.questions.map((q) => (q.id === questionId ? { ...q, ...changes } : q)),
     }));
 
-    // "required" es un interruptor, no texto: no tiene sentido esperar.
-    const isToggle = "required" in changes && Object.keys(changes).length === 1;
+    // "required" y "textCase" son elecciones sueltas, no texto que se va
+    // tecleando: no hay nada que esperar antes de mandarlas.
+    const keys = Object.keys(changes);
+    const isInstant = keys.length === 1 && (keys[0] === "required" || keys[0] === "textCase");
     const send = () => formsApi.updateQuestion(formId, questionId, changes);
 
-    if (isToggle) {
+    if (isInstant) {
       runWrite(send, "No se pudo guardar la pregunta").then((res) => {
         if (!res.ok) resyncForm(formId);
       });
@@ -374,6 +376,26 @@ export function FormProvider({ children }) {
     if (!ok) resyncForm(formId);
     return ok;
   }, [patchFormLocally, runWrite, resyncForm]);
+
+  const duplicateQuestion = useCallback(async (formId, questionId) => {
+    const { ok, result } = await runWrite(
+      () => formsApi.duplicateQuestion(formId, questionId),
+      "No se pudo duplicar la pregunta"
+    );
+    if (!ok) return null;
+
+    patchFormLocally(formId, (form) => {
+      const questions = [...form.questions];
+      // El backend la inserta justo despues de la original. Si no la
+      // encontramos (se borro mientras tanto) la dejamos al final antes que
+      // perder la copia que ya existe en el servidor.
+      const index = questions.findIndex((q) => q.id === questionId);
+      questions.splice(index < 0 ? questions.length : index + 1, 0, result);
+      return { ...form, questions };
+    });
+
+    return result.id;
+  }, [runWrite, patchFormLocally]);
 
   const reorderQuestions = useCallback(async (formId, fromIndex, toIndex) => {
     patchFormLocally(formId, (form) => {
@@ -530,7 +552,7 @@ export function FormProvider({ children }) {
     return true;
   }, [runWrite, replaceForm]);
 
-  // --- Campos del respondedor ---
+  // --- Campos del usuario ---
 
   const addIntroField = useCallback(async (formId, type = "text") => {
     const { ok, result } = await runWrite(
@@ -625,6 +647,7 @@ export function FormProvider({ children }) {
     addQuestion,
     updateQuestion,
     deleteQuestion,
+    duplicateQuestion,
     reorderQuestions,
     addOption,
     updateOption,

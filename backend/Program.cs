@@ -1,8 +1,18 @@
 using System.Text.Json.Serialization;
+using IescoForms.Api.Data;
 using IescoForms.Api.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// La cadena vive en appsettings.Development.json. Si falta conviene reventar al
+// arrancar y no descubrirlo en la primera peticion que toque la base.
+var connectionString = builder.Configuration.GetConnectionString("IescoForms")
+    ?? throw new InvalidOperationException(
+        "Falta la cadena de conexion 'IescoForms'. Revisa appsettings.Development.json.");
+
+builder.Services.AddDbContext<IescoFormsDbContext>(options => options.UseSqlServer(connectionString));
 
 // El frontend corre en su propio servidor durante el desarrollo, asi que el
 // navegador necesita permiso explicito para llamar a esta API. AllowCredentials
@@ -65,12 +75,25 @@ builder.Services.AddOpenApi();
 
 // Unico punto donde se elige la implementacion de cada almacen. Al pasar a SQL
 // Server estas dos lineas cambian y nada mas se toca.
-builder.Services.AddSingleton<IFormStore, InMemoryFormStore>();
-builder.Services.AddSingleton<IUserStore, InMemoryUserStore>();
-builder.Services.AddSingleton<INotificationStore, InMemoryNotificationStore>();
+builder.Services.AddScoped<IFormStore, SqlFormStore>();
+// Scoped, no Singleton: el DbContext vive lo que dura la peticion y un
+// singleton no puede quedarse con uno guardado.
+builder.Services.AddScoped<IUserStore, SqlUserStore>();
+builder.Services.AddScoped<INotificationStore, SqlNotificationStore>();
 builder.Services.AddSingleton<ImageStorage>();
 
 var app = builder.Build();
+
+// Los usuarios de configuracion tienen que existir en la base antes de que
+// alguien intente entrar. Solo inserta lo que falta, asi que correrlo en cada
+// arranque no pisa nada.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<IescoFormsDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    DatabaseSeeder.Run(db, app.Configuration, logger);
+}
 
 app.UseExceptionHandler();
 
@@ -92,11 +115,19 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Comprobacion rapida de que la API esta viva. Abierta a proposito.
-app.MapGet("/api/health", () => Results.Ok(new
+// Tambien dice si la base responde: es la forma mas rapida de distinguir "la
+// API esta caida" de "la API esta bien pero SQL Server no contesta".
+app.MapGet("/api/health", async (IescoFormsDbContext db) =>
 {
-    status = "ok",
-    storage = "in-memory",
-    time = DateTimeOffset.UtcNow,
-})).AllowAnonymous();
+    var baseViva = await db.Database.CanConnectAsync();
+
+    return Results.Ok(new
+    {
+        status = baseViva ? "ok" : "degraded",
+        storage = "sqlserver",
+        database = baseViva ? "conectada" : "sin conexion",
+        time = DateTimeOffset.UtcNow,
+    });
+}).AllowAnonymous();
 
 app.Run();

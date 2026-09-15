@@ -165,6 +165,8 @@ export const formsApi = {
   updateQuestion: (formId, questionId, changes) =>
     patch(`/forms/${formId}/questions/${questionId}`, changes),
   deleteQuestion: (formId, questionId) => del(`/forms/${formId}/questions/${questionId}`),
+  duplicateQuestion: (formId, questionId) =>
+    post(`/forms/${formId}/questions/${questionId}/duplicate`),
   reorderQuestions: (formId, fromIndex, toIndex) =>
     post(`/forms/${formId}/questions/reorder`, { fromIndex, toIndex }),
 

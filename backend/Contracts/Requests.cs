@@ -24,7 +24,8 @@ public record AddQuestionRequest([Required] string Type);
 public record UpdateQuestionRequest(
     [MaxLength(500)] string? Title,
     [MaxLength(1000)] string? Description,
-    bool? Required);
+    bool? Required,
+    string? TextCase);
 
 public record ReorderQuestionsRequest(int FromIndex, int ToIndex);
 
