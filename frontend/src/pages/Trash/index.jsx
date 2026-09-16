@@ -4,6 +4,7 @@ import { FiEdit3, FiRotateCcw, FiTrash2, FiX, FiAlertTriangle } from "react-icon
 import { useForms } from "../../context/FormContext";
 import PageHeader from "../../components/molecules/PageHeader";
 import SearchToolbar from "../../components/molecules/SearchToolbar";
+import { matchesSearch } from "../../services/search";
 import { ErrorState, LoadingState } from "../../components/molecules/StateView";
 import Button from "../../components/atoms/Button";
 import Spinner from "../../components/atoms/Spinner";
@@ -221,9 +222,7 @@ function Trash() {
     if (ok) setShowEmptyConfirm(false);
   };
 
-  const filtered = trashedForms.filter((f) =>
-    f.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = trashedForms.filter((f) => matchesSearch(search, f.title, f.description));
 
   return (
     <div>
@@ -240,7 +239,6 @@ function Trash() {
           placeholder="Buscar en papelera..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          showFilter={false}
         />
       )}
 
@@ -282,8 +280,17 @@ function Trash() {
       ) : (
         <EmptyState>
           <EmptyIcon><FiTrash2 size={24} /></EmptyIcon>
-          <h3>La papelera esta vacia</h3>
-          <p>Los formularios que elimines apareceran aqui.</p>
+          {trashedForms.length > 0 ? (
+            <>
+              <h3>Sin resultados</h3>
+              <p>Ningun formulario eliminado coincide con "{search.trim()}".</p>
+            </>
+          ) : (
+            <>
+              <h3>La papelera esta vacia</h3>
+              <p>Los formularios que elimines apareceran aqui.</p>
+            </>
+          )}
         </EmptyState>
       ))}
 

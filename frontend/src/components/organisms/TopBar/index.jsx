@@ -7,6 +7,7 @@ import {
 } from "react-icons/fi";
 import Avatar from "../../atoms/Avatar";
 import NotificationsMenu from "../NotificationsMenu";
+import GlobalSearch from "../GlobalSearch";
 import { useThemeMode } from "../../../context/ThemeContext";
 import { useAuth } from "../../../context/AuthContext";
 
@@ -198,6 +199,7 @@ const routeNames = {
   "/plantillas": "Plantillas",
   "/compartidos": "Compartidos",
   "/papelera": "Papelera",
+  "/mi-cuenta": "Mi cuenta",
   "/configuracion": "Configuracion",
 };
 
@@ -216,7 +218,22 @@ function TopBar() {
   const { user, logout } = useAuth();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const menuRef = useRef(null);
+
+  // Ctrl+K (Cmd+K en Mac) abre el buscador desde cualquier pagina.
+  useEffect(() => {
+    const handleKey = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setMenuOpen(false);
+        setSearchOpen(true);
+      }
+    };
+
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, []);
 
   const currentPage = routeNames[pathname] || "Inicio";
   const isDark = mode === "dark";
@@ -254,7 +271,9 @@ function TopBar() {
       </Breadcrumb>
 
       <Actions>
-        <IconButton title="Buscar" aria-label="Buscar"><FiSearch size={18} /></IconButton>
+        <IconButton title="Buscar (Ctrl+K)" aria-label="Buscar" onClick={() => setSearchOpen(true)}>
+          <FiSearch size={18} />
+        </IconButton>
         <IconButton
           onClick={toggleMode}
           title={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
@@ -287,7 +306,7 @@ function TopBar() {
                 </MenuIdentity>
               </MenuHeader>
 
-              <MenuItem role="menuitem" onClick={() => go("/configuracion")}>
+              <MenuItem role="menuitem" onClick={() => go("/mi-cuenta")}>
                 <FiUser size={15} /> Mi cuenta
               </MenuItem>
 
@@ -311,6 +330,8 @@ function TopBar() {
           )}
         </UserMenuWrapper>
       </Actions>
+
+      {searchOpen && <GlobalSearch onClose={() => setSearchOpen(false)} />}
     </Header>
   );
 }

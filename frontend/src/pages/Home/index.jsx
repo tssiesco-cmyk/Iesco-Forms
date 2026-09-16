@@ -111,9 +111,13 @@ function Home() {
 
   const loading = status === "loading";
 
-  const totalResponses = forms.reduce((sum, f) => sum + (f.responseCount ?? 0), 0);
-  const activeForms = forms.filter((f) => f.status === "Activo").length;
-  const recentForms = forms.slice(0, 3);
+  // Los compartidos contigo se cuentan aparte: no son tuyos.
+  const myForms = forms.filter((f) => !f.sharedPermission);
+  const sharedCount = forms.length - myForms.length;
+
+  const totalResponses = myForms.reduce((sum, f) => sum + (f.responseCount ?? 0), 0);
+  const activeForms = myForms.filter((f) => f.status === "Activo").length;
+  const recentForms = myForms.slice(0, 3);
 
   const handleQuickCreate = async () => {
     if (creating) return;
@@ -152,10 +156,10 @@ function Home() {
           <SectionTitle>Resumen</SectionTitle>
         </SectionHeader>
         <StatsGrid>
-          <StatCard icon={<FiEdit3 size={16} />} label="Formularios" number={stat(forms.length)} />
+          <StatCard icon={<FiEdit3 size={16} />} label="Formularios" number={stat(myForms.length)} />
           <StatCard icon={<FiMessageSquare size={16} />} label="Respuestas totales" number={stat(totalResponses)} tone="success" />
           <StatCard icon={<FiTrendingUp size={16} />} label="Formularios activos" number={stat(activeForms)} tone="warning" />
-          <StatCard icon={<FiUsers size={16} />} label="Compartidos" number={stat(0)} tone="danger" />
+          <StatCard icon={<FiUsers size={16} />} label="Compartidos contigo" number={stat(sharedCount)} tone="danger" />
         </StatsGrid>
       </Section>
 

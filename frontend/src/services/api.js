@@ -194,8 +194,12 @@ export const formsApi = {
 
 export const responsesApi = {
   listByForm: (formId, options) => get(`/forms/${formId}/responses`, options),
-  submit: (formId, answers, respondent) =>
-    post(`/forms/${formId}/responses`, { answers, respondent }),
+  /** link: token del enlace, necesario para responder sin sesion. */
+  submit: (formId, answers, respondent, link) =>
+    post(
+      `/forms/${formId}/responses${link ? `?link=${encodeURIComponent(link)}` : ""}`,
+      { answers, respondent }
+    ),
 };
 
 export const trashApi = {
@@ -221,8 +225,66 @@ export const authApi = {
   login: (email, password, rememberMe = false) =>
     post("/auth/login", { email, password, rememberMe }),
   logout: () => post("/auth/logout"),
+  /** Responde igual exista o no el correo. */
+  forgotPassword: (email) => post("/auth/forgot-password", { email }),
   /** Devuelve el perfil si hay sesion viva; lanza 401 si no. */
   me: (options) => get("/auth/me", options),
+};
+
+/**
+ * Compartir un formulario.
+ * - Privado: con personas concretas, para editarlo entre varios. Listar y
+ *   cambiar es solo para el dueno; quitarse a uno mismo lo puede hacer quien
+ *   lo recibio.
+ * - Publico: todos los usuarios lo ven en Compartidos para responderlo.
+ */
+export const sharesApi = {
+  list: (formId, options) => get(`/forms/${formId}/shares`, options),
+  /** Devuelve la lista actualizada de personas. */
+  share: (formId, userId) => request("PUT", `/forms/${formId}/shares/${userId}`, {}),
+  unshare: (formId, userId) => del(`/forms/${formId}/shares/${userId}`),
+  /** Devuelve el formulario actualizado. */
+  setPublic: (formId, isPublic) => request("PUT", `/forms/${formId}/public`, { isPublic }),
+  /** Formularios publicos y publicados de otros usuarios. */
+  listPublic: (options) => get("/forms/public", options),
+};
+
+/**
+ * Enlaces para responder sin iniciar sesion que vencen. Crear, cambiar la hora
+ * y anular es para quien puede editar el formulario; abrir (open) es publico.
+ */
+export const linksApi = {
+  list: (formId, options) => get(`/forms/${formId}/links`, options),
+  create: (formId, expiresAt) => post(`/forms/${formId}/links`, { expiresAt }),
+  updateExpiry: (formId, linkId, expiresAt) => patch(`/forms/${formId}/links/${linkId}`, { expiresAt }),
+  remove: (formId, linkId) => del(`/forms/${formId}/links/${linkId}`),
+  /** Devuelve { expiresAt, form }. 410 si vencio, 409 si el formulario no esta publicado. */
+  open: (token, options) => get(`/links/${encodeURIComponent(token)}`, options),
+};
+
+/** La direccion completa que se comparte para un enlace. */
+export const linkUrl = (token) => `${window.location.origin}/r/${token}`;
+
+/** Usuarios activos para elegir con quien compartir. */
+export const directoryApi = {
+  users: (options) => get("/directory/users", options),
+};
+
+/** Lo que cada usuario cambia de si mismo. */
+export const accountApi = {
+  update: (displayName) => patch("/account", { displayName }),
+  changePassword: (currentPassword, newPassword) =>
+    post("/account/password", { currentPassword, newPassword }),
+};
+
+/** Gestion de usuarios. El backend responde 403 a quien no es Administrador. */
+export const usersApi = {
+  list: (options) => get("/users", options),
+  create: ({ email, displayName, role, password }) =>
+    post("/users", { email, displayName, role, password }),
+  update: (id, changes) => patch(`/users/${id}`, changes),
+  resetPassword: (id, newPassword) => post(`/users/${id}/password`, { newPassword }),
+  dismissPasswordRequest: (id) => del(`/users/${id}/password-request`),
 };
 
 export const healthApi = {

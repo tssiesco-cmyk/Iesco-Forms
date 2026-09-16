@@ -274,6 +274,14 @@ export function FormProvider({ children }) {
     return true;
   }, [forms, runWrite, toast]);
 
+  /**
+   * Saca un formulario de la lista sin tocar el servidor. Para cuando deja de
+   * estar al alcance del usuario por otra via, como quitarse de un compartido.
+   */
+  const removeFormLocally = useCallback((id) => {
+    setForms((prev) => prev.filter((f) => f.id !== id));
+  }, []);
+
   // --- Papelera ---
 
   const restoreForm = useCallback(async (id) => {
@@ -602,9 +610,9 @@ export function FormProvider({ children }) {
    * Enviar una respuesta no es un guardado de fondo: quien responde tiene que
    * saber si llego o no, asi que devolvemos el error para que la vista lo muestre.
    */
-  const addResponse = useCallback(async (formId, answers, respondent = {}) => {
+  const addResponse = useCallback(async (formId, answers, respondent = {}, link) => {
     try {
-      const created = await responsesApi.submit(formId, answers, respondent);
+      const created = await responsesApi.submit(formId, answers, respondent, link);
 
       setResponsesByForm((prev) =>
         prev[formId] ? { ...prev, [formId]: [created, ...prev[formId]] } : prev
@@ -634,6 +642,7 @@ export function FormProvider({ children }) {
     flushPendingWrites,
     // lectura
     getForm,
+    replaceForm,
     getFormResponses,
     loadResponses,
     // escritura
@@ -641,6 +650,7 @@ export function FormProvider({ children }) {
     createFormFromTemplate,
     updateForm,
     trashForm,
+    removeFormLocally,
     restoreForm,
     permanentDeleteForm,
     emptyTrash,

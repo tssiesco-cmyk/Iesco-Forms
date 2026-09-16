@@ -11,6 +11,8 @@ import SkeletonCard from "../../components/molecules/SkeletonCard";
 import { ErrorState, EmptyState } from "../../components/molecules/StateView";
 import Button from "../../components/atoms/Button";
 import Spinner from "../../components/atoms/Spinner";
+import { matchesSearch } from "../../services/search";
+import ShareFormModal from "../../components/organisms/ShareFormModal";
 
 const CardGrid = styled.div`
   display: grid;
@@ -115,16 +117,39 @@ function Forms() {
   const navigate = useNavigate();
   const { forms, status, error, reload, createForm, trashForm } = useForms();
   const [search, setSearch] = useState("");
+  // todos | Activo | Borrador
+  const [statusFilter, setStatusFilter] = useState("todos");
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [formName, setFormName] = useState("");
   const [formDesc, setFormDesc] = useState("");
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [shareTarget, setShareTarget] = useState(null);
 
-  const filtered = forms.filter((f) =>
-    f.title.toLowerCase().includes(search.toLowerCase())
+  // Los que te compartieron viven en Compartidos, no aqui.
+  const myForms = forms.filter((f) => !f.sharedPermission);
+
+  const filtered = myForms.filter((f) =>
+    (statusFilter === "todos" || f.status === statusFilter) &&
+    matchesSearch(search, f.title, f.description)
   );
+
+  const statusOptions = [
+    { value: "todos", label: "Todos", count: myForms.length },
+    { value: "Activo", label: "Activos", count: myForms.filter((f) => f.status === "Activo").length },
+    { value: "Borrador", label: "Borradores", count: myForms.filter((f) => f.status === "Borrador").length },
+  ];
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("todos");
+  };
+
+  const statusLabel = { Activo: "activos", Borrador: "en borrador" }[statusFilter];
+  const noResultsText = search.trim()
+    ? `Ningun formulario${statusLabel ? ` ${statusLabel}` : ""} coincide con "${search.trim()}".`
+    : `No tienes formularios ${statusLabel}.`;
 
   const handleCreate = async () => {
     if (creating) return;
@@ -165,6 +190,7 @@ function Forms() {
         placeholder="Buscar formularios..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
+        filters={{ value: statusFilter, onChange: setStatusFilter, options: statusOptions }}
       />
 
       {status === "error" && <ErrorState error={error} onRetry={reload} />}
@@ -175,7 +201,7 @@ function Forms() {
         </CardGrid>
       )}
 
-      {status === "ready" && forms.length === 0 && (
+      {status === "ready" && myForms.length === 0 && (
         <EmptyState
           icon={<FiEdit3 size={24} />}
           title="Todavia no tienes formularios"
@@ -190,13 +216,15 @@ function Forms() {
         </EmptyState>
       )}
 
-      {status === "ready" && forms.length > 0 && filtered.length === 0 && (
+      {status === "ready" && myForms.length > 0 && filtered.length === 0 && (
         <EmptyState
           icon={<FiSearch size={24} />}
           title="Sin resultados"
-          text={`Ningun formulario coincide con "${search}".`}
+          text={noResultsText}
           compact
-        />
+        >
+          <Button $variant="secondary" onClick={clearFilters}>Quitar filtros</Button>
+        </EmptyState>
       )}
 
       {status === "ready" && filtered.length > 0 && (
@@ -211,16 +239,20 @@ function Forms() {
               date={f.status === "Borrador" ? "Borrador" : f.createdAt}
               responses={f.responseCount ?? 0}
               status={f.status}
+              badge={f.isPublic ? "Publico" : undefined}
               onClick={() => navigate(`/formularios/${f.id}/editar`)}
               onEdit={() => navigate(`/formularios/${f.id}/editar`)}
               onPreview={() => navigate(`/formularios/${f.id}/vista`)}
               onResults={() => navigate(`/formularios/${f.id}/resultados`)}
-              onDelete={() => setDeleteTarget(f)}
+              onShare={f.access === "owner" ? () => setShareTarget(f) : undefined}
+              onDelete={f.access === "owner" ? () => setDeleteTarget(f) : undefined}
             />
           );
         })}
       </CardGrid>
       )}
+
+      {shareTarget && <ShareFormModal form={shareTarget} onClose={() => setShareTarget(null)} />}
 
       {/* Modal crear */}
       {showModal && (

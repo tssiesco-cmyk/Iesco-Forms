@@ -3,12 +3,15 @@ import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
 import {
   FiSmile, FiTrendingUp, FiCalendar, FiMail, FiUserPlus,
-  FiBriefcase, FiHelpCircle, FiStar, FiPieChart
+  FiBriefcase, FiHelpCircle, FiStar, FiPieChart, FiSearch
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import PageHeader from "../../components/molecules/PageHeader";
-import { ErrorState, LoadingState } from "../../components/molecules/StateView";
+import SearchToolbar from "../../components/molecules/SearchToolbar";
+import { EmptyState, ErrorState, LoadingState } from "../../components/molecules/StateView";
+import Button from "../../components/atoms/Button";
 import Spinner from "../../components/atoms/Spinner";
+import { matchesSearch } from "../../services/search";
 
 const Section = styled.section`
   margin-bottom: ${({ theme }) => theme.spacing["4xl"]};
@@ -119,16 +122,22 @@ const iconMap = {
 
 const categories = [
   {
+    key: "feedback",
+    label: "Feedback",
     title: "Feedback y encuestas",
     subtitle: "Mide la satisfaccion y recopila opiniones de tus clientes.",
     ids: ["tpl-satisfaction", "tpl-nps", "tpl-event-feedback"],
   },
   {
+    key: "contacto",
+    label: "Contacto",
     title: "Contacto y registro",
     subtitle: "Recibe mensajes, registra asistentes y recibe postulaciones.",
     ids: ["tpl-contact", "tpl-registration", "tpl-job"],
   },
   {
+    key: "evaluacion",
+    label: "Evaluacion",
     title: "Evaluacion e investigacion",
     subtitle: "Crea quizzes, evalua desempeno y estudia tu mercado.",
     ids: ["tpl-quiz", "tpl-performance", "tpl-market"],
@@ -142,6 +151,31 @@ function Templates() {
   // Se guarda cual plantilla se esta usando para mostrar el giro solo en esa
   // tarjeta y evitar que se pulsen dos a la vez.
   const [usingId, setUsingId] = useState(null);
+
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("todas");
+
+  // Busca en nombre y descripcion de la plantilla y en el titulo de su
+  // seccion, asi "encuesta" tambien trae las de "Feedback y encuestas".
+  const visibleSections = categories
+    .filter((cat) => category === "todas" || cat.key === category)
+    .map((cat) => ({
+      ...cat,
+      items: cat.ids
+        .map((tplId) => templates.find((t) => t.id === tplId))
+        .filter((tpl) => tpl && matchesSearch(search, tpl.name, tpl.description, cat.title)),
+    }))
+    .filter((cat) => cat.items.length > 0);
+
+  const categoryOptions = [
+    { value: "todas", label: "Todas" },
+    ...categories.map((cat) => ({ value: cat.key, label: cat.label })),
+  ];
+
+  const clearFilters = () => {
+    setSearch("");
+    setCategory("todas");
+  };
 
   const handleUseTemplate = async (templateId) => {
     if (usingId) return;
@@ -163,15 +197,35 @@ function Templates() {
       {status === "error" && <ErrorState error={error} onRetry={reload} />}
       {status === "loading" && <LoadingState text="Cargando plantillas..." />}
 
-      {status === "ready" && categories.map((cat) => (
-        <Section key={cat.title}>
+      {status === "ready" && (
+        <SearchToolbar
+          placeholder="Buscar plantillas..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          filters={{ value: category, onChange: setCategory, options: categoryOptions }}
+        />
+      )}
+
+      {status === "ready" && visibleSections.length === 0 && (
+        <EmptyState
+          icon={<FiSearch size={24} />}
+          title="Sin resultados"
+          text={search.trim()
+            ? `Ninguna plantilla coincide con "${search.trim()}".`
+            : "No hay plantillas en esta categoria."}
+          compact
+        >
+          <Button $variant="secondary" onClick={clearFilters}>Quitar filtros</Button>
+        </EmptyState>
+      )}
+
+      {status === "ready" && visibleSections.map((cat) => (
+        <Section key={cat.key}>
           <SectionTitle>{cat.title}</SectionTitle>
           <SectionSubtitle>{cat.subtitle}</SectionSubtitle>
           <CardGrid>
-            {cat.ids.map((tplId) => {
-              const tpl = templates.find((t) => t.id === tplId);
-              const style = iconMap[tplId];
-              if (!tpl) return null;
+            {cat.items.map((tpl) => {
+              const style = iconMap[tpl.id];
               return (
                 <Card
                   key={tpl.id}

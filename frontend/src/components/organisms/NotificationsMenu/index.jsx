@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import styled, { keyframes } from "styled-components";
 import {
   FiBell, FiMessageSquare, FiCheck, FiAlertTriangle,
-  FiSend, FiRotateCcw, FiEdit3, FiTrash2, FiPlusCircle
+  FiSend, FiRotateCcw, FiEdit3, FiTrash2, FiPlusCircle, FiShare2
 } from "react-icons/fi";
 import { useNotifications } from "../../../context/NotificationsContext";
 import Spinner from "../../atoms/Spinner";
@@ -255,6 +255,11 @@ const TYPES = {
     tone: "danger",
     text: () => "Movido a la papelera",
   },
+  form_shared: {
+    icon: <FiShare2 size={15} />,
+    tone: "primary",
+    text: () => "Compartido contigo",
+  },
   form_restored: {
     icon: <FiPlusCircle size={15} />,
     tone: "success",
@@ -303,8 +308,11 @@ function NotificationsMenu() {
   const handleOpen = (notification) => {
     setOpen(false);
     markRead(notification.id);
-    // Una notificacion que no lleva a ningun sitio es decoracion.
-    navigate(`/formularios/${notification.formId}/resultados`);
+    // Una notificacion que no lleva a ningun sitio es decoracion. Lo que te
+    // compartieron lleva a Compartidos: ahi se ve de quien es y que permiso tienes.
+    navigate(notification.type === "form_shared"
+      ? "/compartidos"
+      : `/formularios/${notification.formId}/resultados`);
   };
 
   return (

@@ -18,6 +18,7 @@ import Templates from "./pages/Templates";
 import Shared from "./pages/Shared";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
+import Account from "./pages/Account";
 
 function App() {
   return (
@@ -31,6 +32,15 @@ function App() {
               {/* Publicas: portada, entrar, y responder un formulario publicado. */}
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
+              {/* Enlace que vence: se responde sin iniciar sesion. */}
+              <Route
+                path="/r/:token"
+                element={
+                  <FormProvider>
+                    <FormView />
+                  </FormProvider>
+                }
+              />
               <Route
                 path="/formularios/:id/vista"
                 element={
@@ -55,6 +65,7 @@ function App() {
                   <Route path="/plantillas" element={<Templates />} />
                   <Route path="/compartidos" element={<Shared />} />
                   <Route path="/papelera" element={<Trash />} />
+                  <Route path="/mi-cuenta" element={<Account />} />
                   <Route path="/configuracion" element={<Settings />} />
                 </Route>
 

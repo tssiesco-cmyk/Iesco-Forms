@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
+import { downloadResultsPdf } from "../../services/resultsPdf";
+import { CHART_COLORS } from "../../styles/chartColors";
+import Spinner from "../../components/atoms/Spinner";
 import { useParams, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import {
   FiArrowLeft, FiEdit3, FiEye, FiUsers, FiCheckCircle,
-  FiMessageSquare, FiClock, FiTrendingUp, FiPercent
+  FiMessageSquare, FiClock, FiTrendingUp, FiPercent, FiDownload
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
+import { useToast } from "../../context/ToastContext";
 import Button from "../../components/atoms/Button";
 import Avatar from "../../components/atoms/Avatar";
 import { ErrorState, LoadingState } from "../../components/molecules/StateView";
@@ -447,6 +451,15 @@ const CellText = styled.span`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
+/** Abajo a la derecha, siempre visible aunque la tabla sea larga. */
+const DownloadButton = styled(Button)`
+  position: fixed;
+  right: 32px;
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  box-shadow: ${({ theme }) => theme.shadows.lg};
+`;
+
 const EmptyMsg = styled.p`
   color: ${({ theme }) => theme.colors.textMuted};
   font-size: ${({ theme }) => theme.fontSizes.base};
@@ -456,7 +469,8 @@ const EmptyMsg = styled.p`
 `;
 
 /* ===== HELPERS ===== */
-const chartColors = ["#6542F4", "#2DB87F", "#F5A623", "#E34850", "#3B82F6", "#8B5CF6", "#0891B2", "#D97706", "#059669", "#7C3AED"];
+// Compartidos con el informe en PDF, para que cada opcion tenga el mismo color.
+const chartColors = CHART_COLORS;
 
 const typeLabels = {
   short_text: "Texto corto",
@@ -516,6 +530,8 @@ function FormResults() {
   const navigate = useNavigate();
   const { getForm, status, error, reload, getFormResponses, loadResponses } = useForms();
   const [activeTab, setActiveTab] = useState("resumen");
+  const [downloading, setDownloading] = useState(false);
+  const toast = useToast();
 
   // Las respuestas no vienen en la carga inicial: se piden al entrar aqui.
   const [responsesState, setResponsesState] = useState("loading");
@@ -614,6 +630,19 @@ function FormResults() {
     const emailField = form.introFields?.find((f) => f.type === "email");
     if (emailField && r[emailField.id]) return r[emailField.id];
     return "";
+  };
+
+  const handleDownload = async () => {
+    if (downloading || totalResponses === 0) return;
+
+    setDownloading(true);
+    try {
+      await downloadResultsPdf(form, formResponses);
+    } catch (err) {
+      toast.error(`No se pudo generar el PDF: ${err.message}`);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const getRespondentAnswerCount = (response) => {
@@ -807,6 +836,18 @@ function FormResults() {
           ) : (
             <EmptyMsg>Aun no hay respuestas para este formulario.</EmptyMsg>
           )
+        )}
+
+        {/* En las dos pestanas, en el mismo sitio: el informe es el mismo. */}
+        {responsesState === "ready" && (
+          <DownloadButton
+            onClick={handleDownload}
+            disabled={downloading || totalResponses === 0}
+            title={totalResponses === 0 ? "Todavia no hay respuestas para descargar" : "Informe completo en PDF"}
+          >
+            {downloading ? <Spinner $size={14} $color="currentColor" /> : <FiDownload size={16} />}
+            {downloading ? "Generando..." : "Descargar"}
+          </DownloadButton>
         )}
       </Main>
     </Page>

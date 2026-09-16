@@ -27,6 +27,7 @@ const Badge = styled.span`
   font-weight: ${({ theme }) => theme.fontWeights.medium};
   padding: 3px 8px;
   border-radius: 20px;
+  white-space: nowrap;
   ${({ $variant = "default" }) => variants[$variant]}
 `;
 

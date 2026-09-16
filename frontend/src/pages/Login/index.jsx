@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import styled, { keyframes } from "styled-components";
-import { FiMail, FiLock, FiEye, FiEyeOff, FiAlertTriangle, FiArrowRight, FiArrowLeft } from "react-icons/fi";
+import { FiMail, FiLock, FiEye, FiEyeOff, FiAlertTriangle, FiArrowRight, FiArrowLeft, FiCheckCircle } from "react-icons/fi";
 import { useAuth } from "../../context/AuthContext";
 import { useThemeMode } from "../../context/ThemeContext";
+import { authApi } from "../../services/api";
 import Button from "../../components/atoms/Button";
 import Spinner from "../../components/atoms/Spinner";
 import logo from "../../assets/logoiescogroup.png";
@@ -202,21 +203,145 @@ const SubmitButton = styled(Button)`
   margin-top: 4px;
 `;
 
-const Hint = styled.div`
-  margin-top: 18px;
-  padding: 12px 14px;
-  border: 1px dashed ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.radii.md};
-  font-size: ${({ theme }) => theme.fontSizes.sm};
-  color: ${({ theme }) => theme.colors.textMuted};
-  line-height: 1.6;
-
-  strong { color: ${({ theme }) => theme.colors.textSecondary}; }
-  code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    color: ${({ theme }) => theme.colors.text};
-  }
+const OptionsRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 `;
+
+const LinkButton = styled.button`
+  font-size: ${({ theme }) => theme.fontSizes.md};
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  text-decoration: underline;
+  text-underline-offset: 3px;
+
+  &:hover { color: ${({ theme }) => theme.colors.text}; }
+`;
+
+const Success = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: ${({ theme }) => theme.radii.md};
+  background: ${({ theme }) => theme.colors.successBg};
+  color: ${({ theme }) => theme.colors.success};
+  font-size: ${({ theme }) => theme.fontSizes.md};
+  line-height: 1.45;
+`;
+
+const Explanation = styled.p`
+  margin: 0;
+  font-size: ${({ theme }) => theme.fontSizes.md};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  line-height: 1.5;
+`;
+
+/**
+ * "Olvide mi contrasena". Todavia no hay servidor de correo, asi que no envia
+ * un enlace: deja una solicitud que los administradores ven en Configuracion >
+ * Usuarios, y ellos le ponen una contrasena nueva.
+ *
+ * El mensaje de exito es el mismo exista o no el correo, igual que en el
+ * servidor: si no, esta pantalla serviria para averiguar que cuentas hay.
+ */
+function ForgotPassword({ initialEmail, onBack }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [touched, setTouched] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState(null);
+
+  const emailInvalid = touched && !email.trim();
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (sending) return;
+
+    setTouched(true);
+    if (!email.trim()) return;
+
+    setSending(true);
+    setError(null);
+    try {
+      await authApi.forgotPassword(email.trim());
+      setSent(true);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (sent) {
+    return (
+      <Form as="div">
+        <Success role="status">
+          <FiCheckCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>
+            Solicitud enviada. Si <strong>{email.trim()}</strong> tiene una cuenta, un
+            administrador te pondra una contrasena nueva y te la hara llegar.
+          </span>
+        </Success>
+        <SubmitButton type="button" $variant="secondary" onClick={onBack}>
+          <FiArrowLeft size={16} /> Volver a entrar
+        </SubmitButton>
+      </Form>
+    );
+  }
+
+  return (
+    <Form onSubmit={handleSubmit} noValidate>
+      <Explanation>
+        Escribe tu correo. Un administrador recibira la solicitud y te dara una
+        contrasena nueva.
+      </Explanation>
+
+      {error && (
+        <Alert role="alert">
+          <FiAlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>
+            {error.isNetwork
+              ? "No se pudo conectar con el servidor. Comprueba que el backend este corriendo."
+              : error.status === 429
+                ? "Demasiadas solicitudes seguidas. Espera unos minutos y vuelve a intentarlo."
+                : error.message}
+          </span>
+        </Alert>
+      )}
+
+      <Field>
+        <Label htmlFor="forgot-email">Correo electronico</Label>
+        <InputWrapper $invalid={emailInvalid}>
+          <InputIcon><FiMail size={16} /></InputIcon>
+          <Input
+            id="forgot-email"
+            type="email"
+            autoComplete="username"
+            placeholder="ejemplo@iescogroup.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onBlur={() => setTouched(true)}
+            autoFocus
+          />
+        </InputWrapper>
+        {emailInvalid && <FieldError>Escribe tu correo.</FieldError>}
+      </Field>
+
+      <SubmitButton type="submit" disabled={sending}>
+        {sending ? <Spinner $size={15} $color="currentColor" /> : null}
+        {sending ? "Enviando..." : "Enviar solicitud"}
+      </SubmitButton>
+
+      <LinkButton type="button" onClick={onBack} style={{ alignSelf: "center" }}>
+        Volver a entrar
+      </LinkButton>
+    </Form>
+  );
+}
 
 function Login() {
   const navigate = useNavigate();
@@ -231,6 +356,7 @@ function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [touched, setTouched] = useState({ email: false, password: false });
+  const [forgotten, setForgotten] = useState(false);
 
   const emailInvalid = touched.email && !email.trim();
   const passwordInvalid = touched.password && !password;
@@ -269,9 +395,14 @@ function Login() {
         <Brand>
           <Logo src={logo} alt="IESCO" />
           <BrandName>IESCO Forms</BrandName>
-          <Subtitle>Entra para gestionar tus formularios.</Subtitle>
+          <Subtitle>
+            {forgotten ? "Recupera el acceso a tu cuenta." : "Entra para gestionar tus formularios."}
+          </Subtitle>
         </Brand>
 
+        {forgotten ? (
+          <ForgotPassword initialEmail={email} onBack={() => setForgotten(false)} />
+        ) : (
         <Form onSubmit={handleSubmit} noValidate>
           {error && (
             <Alert role="alert">
@@ -292,7 +423,7 @@ function Login() {
                 id="email"
                 type="email"
                 autoComplete="username"
-                placeholder="tu.correo@iescogroup.com"
+                placeholder="ejemplo@iescogroup.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onBlur={() => setTouched((t) => ({ ...t, email: true }))}
@@ -327,14 +458,19 @@ function Login() {
             {passwordInvalid && <FieldError>Escribe tu contrasena.</FieldError>}
           </Field>
 
-          <Remember>
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-            />
-            Mantener la sesion abierta
-          </Remember>
+          <OptionsRow>
+            <Remember>
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              Mantener la sesion abierta
+            </Remember>
+            <LinkButton type="button" onClick={() => { setError(null); setForgotten(true); }}>
+              Olvidaste tu contrasena?
+            </LinkButton>
+          </OptionsRow>
 
           <SubmitButton type="submit" disabled={submitting}>
             {submitting ? <Spinner $size={15} $color="currentColor" /> : null}
@@ -342,13 +478,6 @@ function Login() {
             {!submitting && <FiArrowRight size={16} />}
           </SubmitButton>
         </Form>
-
-        {import.meta.env.DEV && (
-          <Hint>
-            <strong>Solo en desarrollo:</strong><br />
-            <code>admin@iescogroup.com</code> / <code>Iesco2026!</code><br />
-            <code>editor@iescogroup.com</code> / <code>Editor2026!</code>
-          </Hint>
         )}
       </Card>
     </Page>

@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import styled, { keyframes, css } from "styled-components";
 import { FiArrowRight, FiArrowLeft, FiCheck, FiX, FiAlertTriangle } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
+import { useAuth } from "../../context/AuthContext";
+import { formsApi, linksApi } from "../../services/api";
 import Spinner from "../../components/atoms/Spinner";
 
 /* --- ANIMATIONS --- */
@@ -470,11 +472,82 @@ function applyTextCase(value, textCase) {
   return value;
 }
 
+/** Que decir segun por que no se pudo abrir. */
+const REMOTE_ERRORS = {
+  expired: {
+    title: "Este enlace ya vencio",
+    text: "Pide un enlace nuevo a quien te lo envio.",
+  },
+  closed: {
+    title: "Formulario cerrado",
+    text: "Este formulario no esta aceptando respuestas en este momento.",
+  },
+  login: {
+    title: "Necesitas un enlace para responder",
+    text: "Pide a quien creo el formulario un enlace para responder, o inicia sesion.",
+  },
+  notfound: {
+    title: "Formulario no encontrado",
+    text: "Puede que se haya eliminado, que el enlace se haya anulado o que sea incorrecto.",
+  },
+};
+
+function remoteStatusFor(err, viaLink) {
+  if (err.status === 410) return "expired";
+  if (err.status === 409) return "closed";
+  if (err.status === 401) return "login";
+  if (err.status === 404) return "notfound";
+  return viaLink && !err.isNetwork ? "notfound" : "error";
+}
+
+/**
+ * Pantalla para responder. Se llega de dos formas:
+ * - /formularios/:id/vista, con sesion (vista previa o formulario publico).
+ * - /r/:token, un enlace que vence, sin necesidad de sesion.
+ */
 function FormView() {
-  const { id } = useParams();
+  const { id: routeId, token } = useParams();
   const navigate = useNavigate();
-  const { getForm, status, error, addResponse } = useForms();
-  const form = getForm(id);
+  const { getForm, status, addResponse } = useForms();
+  const { isAuthenticated } = useAuth();
+
+  // Por enlace siempre manda lo que diga el enlace (puede haber vencido),
+  // aunque el formulario tambien este en la lista del usuario.
+  const contextForm = token ? undefined : getForm(routeId);
+
+  // La lista del contexto solo trae los formularios propios y los compartidos
+  // para editar. Uno publico de otra persona o un enlace no estan ahi: se piden
+  // sueltos.
+  const [remote, setRemote] = useState({ status: "idle", form: null, error: null });
+
+  useEffect(() => {
+    if (contextForm || (!token && status === "loading")) return;
+
+    const controller = new AbortController();
+    setRemote({ status: "loading", form: null, error: null });
+
+    const request = token
+      ? linksApi.open(token, { signal: controller.signal }).then((result) => result.form)
+      : formsApi.getById(routeId, { signal: controller.signal });
+
+    request
+      .then((found) => setRemote({ status: "ready", form: found, error: null }))
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        setRemote({ status: remoteStatusFor(err, Boolean(token)), form: null, error: err });
+      });
+
+    return () => controller.abort();
+  }, [routeId, token, contextForm, status]);
+
+  const form = contextForm ?? remote.form;
+  const id = form?.id ?? routeId;
+
+  // Quien puede editarlo vuelve al editor. Quien solo responde vuelve a
+  // Compartidos si tiene sesion, o a la portada si llego por un enlace.
+  const exitPath = form?.access && !token
+    ? `/formularios/${id}/editar`
+    : isAuthenticated ? "/compartidos" : "/";
 
   // El fondo lo elige quien crea el formulario. Cuando hay imagen, el texto de
   // toda la pantalla pasa a blanco mediante las variables CSS de Page.
@@ -522,7 +595,7 @@ function FormView() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
-  if (status === "loading") {
+  if (!form && (remote.status === "idle" || remote.status === "loading")) {
     return (
       <Page {...backgroundProps}>
         <ThankYou>
@@ -533,15 +606,15 @@ function FormView() {
     );
   }
 
-  if (status === "error") {
+  if (!form && remote.status === "error") {
     return (
       <Page {...backgroundProps}>
         <ThankYou>
           <ThankTitle>No se pudo cargar</ThankTitle>
           <ThankText>
-            {error?.isNetwork
+            {remote.error?.isNetwork
               ? "El servidor no responde. Intentalo de nuevo en un momento."
-              : error?.message}
+              : remote.error?.message}
           </ThankText>
           <SubmitButton onClick={() => window.location.reload()}>Reintentar</SubmitButton>
         </ThankYou>
@@ -550,12 +623,13 @@ function FormView() {
   }
 
   if (!form) {
+    const message = REMOTE_ERRORS[remote.status] ?? REMOTE_ERRORS.notfound;
     return (
       <Page {...backgroundProps}>
         <ThankYou>
-          <ThankTitle>Formulario no encontrado</ThankTitle>
-          <ThankText>Puede que se haya eliminado o que el enlace sea incorrecto.</ThankText>
-          <SubmitButton onClick={() => navigate("/formularios")}>
+          <ThankTitle>{message.title}</ThankTitle>
+          <ThankText>{message.text}</ThankText>
+          <SubmitButton onClick={() => navigate(exitPath)}>
             Volver
           </SubmitButton>
         </ThankYou>
@@ -569,8 +643,8 @@ function FormView() {
         <ThankYou>
           <ThankTitle>Formulario vacio</ThankTitle>
           <ThankText>Este formulario no tiene preguntas todavia.</ThankText>
-          <SubmitButton onClick={() => navigate(`/formularios/${id}/editar`)}>
-            Editar formulario
+          <SubmitButton onClick={() => navigate(exitPath)}>
+            {form.access ? "Editar formulario" : "Volver"}
           </SubmitButton>
         </ThankYou>
       </Page>
@@ -612,7 +686,7 @@ function FormView() {
     setSubmitting(true);
     setSubmitError(null);
 
-    const result = await addResponse(id, {}, buildRespondent());
+    const result = await addResponse(id, {}, buildRespondent(), token);
     setSubmitting(false);
 
     if (result.ok) setStep("submitted");
@@ -657,7 +731,7 @@ function FormView() {
     setSubmitting(true);
     setSubmitError(null);
 
-    const result = await addResponse(id, answers, buildRespondent());
+    const result = await addResponse(id, answers, buildRespondent(), token);
     setSubmitting(false);
 
     if (result.ok) setStep("submitted");
@@ -710,7 +784,7 @@ function FormView() {
       <Page {...backgroundPropsFor(introBackground)} onKeyDown={handleKeyDown} tabIndex={0}>
         <TopBar>
           <FormTitleBar>{form.title}</FormTitleBar>
-          <CloseButton onClick={() => navigate(`/formularios/${id}/editar`)}>
+          <CloseButton onClick={() => navigate(exitPath)}>
             <FiX size={18} />
           </CloseButton>
         </TopBar>
@@ -769,7 +843,7 @@ function FormView() {
       <Page>
         <TopBar>
           <FormTitleBar>{form.title}</FormTitleBar>
-          <CloseButton onClick={() => navigate("/formularios")}>
+          <CloseButton onClick={() => navigate(exitPath)}>
             <FiX size={18} />
           </CloseButton>
         </TopBar>
@@ -781,8 +855,8 @@ function FormView() {
               : "Gracias"}
           </ThankTitle>
           <ThankText>Tus respuestas han sido registradas correctamente.</ThankText>
-          <SubmitButton onClick={() => navigate("/formularios")}>
-            Volver al inicio
+          <SubmitButton onClick={() => navigate(exitPath)}>
+            Volver
           </SubmitButton>
         </ThankYou>
       </Page>
@@ -796,7 +870,7 @@ function FormView() {
 
       <TopBar>
         <FormTitleBar>{form.title}</FormTitleBar>
-        <CloseButton onClick={() => navigate(`/formularios/${id}/editar`)}>
+        <CloseButton onClick={() => navigate(exitPath)}>
           <FiX size={18} />
         </CloseButton>
       </TopBar>

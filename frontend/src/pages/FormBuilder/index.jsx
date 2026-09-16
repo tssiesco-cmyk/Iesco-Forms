@@ -6,13 +6,15 @@ import {
   FiCircle, FiCheckSquare, FiChevronUp, FiChevronDown,
   FiEye, FiX, FiBarChart2, FiUser, FiToggleLeft, FiToggleRight, FiMail, FiPhone,
   FiSend, FiRotateCcw, FiCheck, FiAlertCircle, FiImage, FiUpload,
-  FiCopy, FiChevronsLeft, FiChevronsRight
+  FiCopy, FiChevronsLeft, FiChevronsRight, FiShare2
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import Button from "../../components/atoms/Button";
 import Badge from "../../components/atoms/Badge";
 import Spinner from "../../components/atoms/Spinner";
 import { ErrorState, LoadingState } from "../../components/molecules/StateView";
+import ShareFormModal from "../../components/organisms/ShareFormModal";
+import FormLinksPanel from "../../components/organisms/FormLinksPanel";
 
 const Page = styled.div`
   display: flex;
@@ -31,7 +33,8 @@ const LeftPanel = styled.aside`
   border-right: 1px solid ${({ theme }) => theme.colors.border};
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Con fondo, datos, formato y enlaces ya no cabe todo: se desplaza. */
+  overflow-y: auto;
 `;
 
 /* --- SIDE PANEL: solo las preguntas, a la derecha del editor --- */
@@ -848,6 +851,7 @@ function FormBuilder() {
   const [uploading, setUploading] = useState(false);
   const [uploadingQuestion, setUploadingQuestion] = useState(false);
   const [uploadingIntro, setUploadingIntro] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const fileInputRef = useRef(null);
   const questionFileInputRef = useRef(null);
   const introFileInputRef = useRef(null);
@@ -922,6 +926,9 @@ function FormBuilder() {
       </Page>
     );
   }
+
+  // Los compartidos vuelven a Compartidos, no a una lista donde no estan.
+  const backPath = form.sharedPermission ? "/compartidos" : "/formularios";
 
   const activeQuestion = form.questions.find((q) => q.id === activeQuestionId);
   const activeIndex = form.questions.findIndex((q) => q.id === activeQuestionId);
@@ -1021,10 +1028,11 @@ function FormBuilder() {
 
   return (
     <Page>
+      {sharing && <ShareFormModal form={form} onClose={() => setSharing(false)} />}
 
       <LeftPanel>
         <PanelHeader>
-          <BackButton onClick={() => { flushPendingWrites(); navigate("/formularios"); }}>
+          <BackButton onClick={() => { flushPendingWrites(); navigate(backPath); }}>
             <FiArrowLeft size={18} />
           </BackButton>
           <HeaderTitles>
@@ -1242,6 +1250,8 @@ function FormBuilder() {
             </>
           )}
         </CaseSection>
+
+        <FormLinksPanel formId={id} isPublished={isPublished} />
       </LeftPanel>
 
       <MainEditor>
@@ -1267,6 +1277,11 @@ function FormBuilder() {
           </ToolbarStatus>
 
           <ToolbarActions>
+            {form.access === "owner" && (
+              <Button $variant="secondary" $size="sm" onClick={() => setSharing(true)}>
+                <FiShare2 size={14} /> Compartir
+              </Button>
+            )}
             <Button
               $variant="secondary"
               $size="sm"

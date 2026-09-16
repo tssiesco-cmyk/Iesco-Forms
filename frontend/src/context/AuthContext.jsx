@@ -77,6 +77,9 @@ export function AuthProvider({ children }) {
     setStatus("anonymous");
   }, [navigate]);
 
+  /** Tras editar la cuenta, el servidor devuelve el perfil nuevo. */
+  const updateProfile = useCallback((profile) => setUser(profile), []);
+
   const value = useMemo(() => ({
     user,
     status,
@@ -84,7 +87,8 @@ export function AuthProvider({ children }) {
     isAdmin: user?.role === "Administrador",
     login,
     logout,
-  }), [user, status, login, logout]);
+    updateProfile,
+  }), [user, status, login, logout, updateProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

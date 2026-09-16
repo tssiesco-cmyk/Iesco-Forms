@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import styled from "styled-components";
-import { FiMoreHorizontal, FiEdit3, FiEye, FiBarChart2, FiTrash2, FiCopy } from "react-icons/fi";
+import { FiMoreHorizontal, FiEdit3, FiEye, FiBarChart2, FiTrash2, FiCopy, FiShare2, FiLogOut } from "react-icons/fi";
 import Badge from "../../atoms/Badge";
 
 const Card = styled.div`
@@ -117,16 +117,21 @@ const Divider = styled.div`
 const Meta = styled.div`
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   margin-top: 10px;
 `;
 
 const MetaText = styled.span`
+  white-space: nowrap;
   font-size: ${({ theme }) => theme.fontSizes.xs};
   color: ${({ theme }) => theme.colors.textMuted};
 `;
 
-function FormCard({ icon, title, date, responses, status, onClick, onEdit, onPreview, onResults, onDuplicate, onDelete }) {
+function FormCard({
+  icon, title, date, responses, status, badge,
+  onClick, onEdit, onPreview, onResults, onDuplicate, onShare, onDelete, onLeave,
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -152,7 +157,7 @@ function FormCard({ icon, title, date, responses, status, onClick, onEdit, onPre
     action?.();
   };
 
-  const hasMenu = Boolean(onEdit || onPreview || onResults || onDuplicate || onDelete);
+  const hasMenu = Boolean(onEdit || onPreview || onResults || onDuplicate || onShare || onDelete || onLeave);
 
   return (
     <Card onClick={onClick} $menuOpen={menuOpen}>
@@ -189,6 +194,19 @@ function FormCard({ icon, title, date, responses, status, onClick, onEdit, onPre
                       <FiCopy size={14} /> Duplicar
                     </DropdownItem>
                   )}
+                  {onShare && (
+                    <DropdownItem onClick={(e) => handleAction(e, onShare)}>
+                      <FiShare2 size={14} /> Compartir
+                    </DropdownItem>
+                  )}
+                  {onLeave && (
+                    <>
+                      <Divider />
+                      <DropdownItem $danger onClick={(e) => handleAction(e, onLeave)}>
+                        <FiLogOut size={14} /> Quitar de compartidos
+                      </DropdownItem>
+                    </>
+                  )}
                   {onDelete && (
                     <>
                       <Divider />
@@ -210,6 +228,7 @@ function FormCard({ icon, title, date, responses, status, onClick, onEdit, onPre
               {status}
             </Badge>
           )}
+          {badge && <Badge $variant="warning">{badge}</Badge>}
         </Meta>
       </CardBody>
     </Card>
