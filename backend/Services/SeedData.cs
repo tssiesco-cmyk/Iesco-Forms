@@ -5,10 +5,31 @@ namespace IescoForms.Api.Services;
 
 /// <summary>
 /// Datos de ejemplo, los mismos que el frontend trae hoy en FormContext.
-/// Cuando entre la base de datos, esto se convierte en el seed de la migracion.
+///
+/// El catalogo de plantillas de <see cref="Templates"/> no es un ejemplo: es la
+/// version que usa la aplicacion. Las plantillas son solo lectura, iguales para
+/// todos y no dependen de quien este conectado, asi que viven aqui y no en la
+/// base. Se editan en este archivo y el cambio viaja en el repositorio.
 /// </summary>
 public static class SeedData
 {
+    /// <summary>
+    /// Catalogo de plantillas. Se construye una vez y se reparte a todas las
+    /// peticiones: es inmutable en la practica, nadie lo escribe en caliente.
+    ///
+    /// Lazy y no un inicializador directo: los campos estaticos se inicializan
+    /// en orden de declaracion, y las escalas que usan las plantillas
+    /// (Calificacion, Escala0A10, LineasDeServicio...) estan al final del
+    /// archivo. Construir aqui las dejaria en null.
+    /// </summary>
+    private static readonly Lazy<IReadOnlyList<Template>> _templates =
+        new(() => CreateTemplates());
+
+    public static IReadOnlyList<Template> Templates => _templates.Value;
+
+    public static Template? FindTemplate(string id) =>
+        Templates.FirstOrDefault(t => t.Id == id);
+
     /// <summary>
     /// Los formularios de ejemplo no tienen dueno: ya no hay usuarios fijos en el
     /// codigo a los que asignarlos.
@@ -164,26 +185,20 @@ public static class SeedData
         new Template
         {
             Id = "tpl-satisfaction",
-            Name = "Encuesta de satisfaccion",
-            Description = "Mide la satisfaccion de tus clientes con el servicio, la atencion y el valor recibido.",
+            Name = "Encuesta de satisfacción",
+            Description = "Mide la satisfacción de tus clientes con el servicio, el equipo asignado y el cumplimiento de plazos.",
             Category = "Feedback",
             Questions =
             [
-                Choice("Que servicio o producto contrataste?", true, "Consultoria", "Implementacion", "Soporte y mantenimiento", "Capacitacion", "Otro"),
-                Choice("Hace cuanto tiempo trabajas con nosotros?", true, "Menos de 6 meses", "De 6 meses a 1 ano", "De 1 a 3 anos", "Mas de 3 anos"),
-                Choice("En general, que tan satisfecho estas con nuestro servicio?", true, Satisfaccion),
-                Choice("Como calificas la calidad del servicio recibido?", true, Calificacion),
-                Choice("Como calificas los tiempos de respuesta?", true, Calificacion),
-                Choice("Como calificas el conocimiento tecnico de nuestro equipo?", true, Calificacion),
-                Choice("Como calificas la claridad de nuestra comunicacion?", true, Calificacion),
-                Choice("La relacion calidad-precio es adecuada?", true, Acuerdo),
-                Choice("Tu problema o necesidad quedo resuelto?", true, "Totalmente", "En su mayor parte", "Parcialmente", "No se resolvio"),
-                MultiChoice("Que aspectos valoras mas de trabajar con nosotros?", false, "Calidad del trabajo", "Cumplimiento de plazos", "Atencion personalizada", "Precio", "Experiencia del equipo", "Flexibilidad"),
-                Choice("Que tan probable es que vuelvas a contratarnos?", true, Probabilidad),
-                Choice("Recomendarias nuestro servicio a un colega?", true, "Definitivamente si", "Probablemente si", "No estoy seguro", "Probablemente no", "Definitivamente no"),
-                LongText("Que es lo que mas te gusto de nuestro servicio?", false),
-                LongText("Que deberiamos mejorar?", false),
-                Choice("Podemos contactarte para conocer mas sobre tu experiencia?", true, "Si", "No"),
+                Choice("¿Qué tan satisfecho está con el servicio?", true, Escala0A10),
+                Choice("¿Cuál es su nivel de satisfacción con el equipo profesional asignado para el servicio?", true, Escala0A10),
+                Choice("¿El servicio fue ejecutado dentro del plazo acordado?", true, "Sí", "No"),
+                ShortText("¿Alguna recomendación para la mejora continua de nuestros servicios?", false),
+                ShortText("¿En qué otra línea de servicio de IESCO se encuentra interesado?", false),
+                ShortText("Nos gustaría mucho recibir cualquier comentario específico sobre nuestro servicio que podamos utilizar en el futuro como testimonios de nuestros clientes en nuestra página web o documentos comerciales (“what our customers say”).", false),
+                Choice("¿Cuál es la probabilidad que contrate nuevamente nuestros servicios?", true, "Muy probable", "Probable", "No estoy seguro", "Poco probable", "Nada probable"),
+                MultiChoice("¿En qué otra línea de servicio de IESCO se encuentra interesado?", false, LineasDeServicio),
+                ShortText("Agradecemos sinceramente tu dedicación al compartir tu tiempo con nosotros. Es posible que nos pongamos en contacto contigo para ampliar y profundizar en tus comentarios. Si deseas mantener una comunicación con nosotros en el futuro, por favor, déjanos tu información de contacto a continuación.", false),
             ],
         },
         new Template
@@ -398,6 +413,21 @@ public static class SeedData
 
     // Escalas repetidas. Van en un solo sitio para que todas las plantillas
     // usen exactamente las mismas palabras y los resultados se puedan comparar.
+    // Escala 0-10 de la encuesta de satisfaccion: once opciones, estilo NPS.
+    private static readonly string[] Escala0A10 = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+
+    // Lineas de servicio de IESCO, en el orden que usa el area comercial.
+    private static readonly string[] LineasDeServicio =
+    [
+        "Entrenamientos (TRN)",
+        "Gestión de Riesgos y Seguridad (PSM)",
+        "Supervisión de Proyectos y Gestión de la Calidad en Proyectos (PQM)",
+        "Gestión de Integridad de Activos (AIM)",
+        "Ingeniería Avanzada (AE)",
+        "Transformación Digital (TSS)",
+        "Otros",
+    ];
+
     private static readonly string[] Calificacion = ["Excelente", "Muy bueno", "Bueno", "Regular", "Malo"];
     private static readonly string[] Satisfaccion = ["Muy satisfecho", "Satisfecho", "Neutral", "Insatisfecho", "Muy insatisfecho"];
     private static readonly string[] Acuerdo = ["Totalmente de acuerdo", "De acuerdo", "Ni de acuerdo ni en desacuerdo", "En desacuerdo", "Totalmente en desacuerdo"];

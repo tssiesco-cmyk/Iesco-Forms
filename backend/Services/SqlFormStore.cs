@@ -111,11 +111,9 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
 
     public Form? CreateFormFromTemplate(string templateId, string ownerId)
     {
-        var plantilla = db.Templates
-            .AsNoTracking()
-            .Include(t => t.Questions.OrderBy(q => q.Position))
-                .ThenInclude(q => q.Options.OrderBy(o => o.Position))
-            .FirstOrDefault(t => t.Id == templateId);
+        // Las plantillas viven en el codigo (SeedData), no en la base: el
+        // formulario nuevo es una copia independiente que si se guarda.
+        var plantilla = SeedData.FindTemplate(templateId);
 
         if (plantilla is null) return null;
 
@@ -152,7 +150,7 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                     Id = NewId(),
                     QuestionId = nueva.Id,
                     Position = posicionOpcion++,
-                    Text = opcion.Text,
+                    Text = opcion,
                 });
             }
 
@@ -751,29 +749,8 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
 
     // -------------------------------------------------------------- plantillas
 
-    public IReadOnlyList<Template> GetTemplates()
-    {
-        var filas = db.Templates
-            .AsNoTracking()
-            .Include(t => t.Questions.OrderBy(q => q.Position))
-                .ThenInclude(q => q.Options.OrderBy(o => o.Position))
-            .ToList();
-
-        return [.. filas.Select(t => new Template
-        {
-            Id = t.Id,
-            Name = t.Name,
-            Description = t.Description,
-            Category = t.Category,
-            Questions = [.. t.Questions.Select(q => new TemplateQuestion
-            {
-                Type = q.Type,
-                Title = q.Title,
-                Required = q.Required,
-                Options = [.. q.Options.Select(o => o.Text)],
-            })],
-        })];
-    }
+    // El catalogo es fijo y vive en el codigo, asi que no hay consulta que hacer.
+    public IReadOnlyList<Template> GetTemplates() => SeedData.Templates;
 
     // ------------------------------------------------------------------ mapeo
 

@@ -170,36 +170,6 @@ public class NotificationRow
     public DateTimeOffset? ReadAt { get; set; }
 }
 
-public class TemplateRow
-{
-    public string Id { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public string Category { get; set; } = string.Empty;
-
-    public List<TemplateQuestionRow> Questions { get; set; } = [];
-}
-
-public class TemplateQuestionRow
-{
-    public string Id { get; set; } = string.Empty;
-    public string TemplateId { get; set; } = string.Empty;
-    public int Position { get; set; }
-    public string Type { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-    public bool Required { get; set; }
-
-    public List<TemplateQuestionOptionRow> Options { get; set; } = [];
-}
-
-public class TemplateQuestionOptionRow
-{
-    public string Id { get; set; } = string.Empty;
-    public string TemplateQuestionId { get; set; } = string.Empty;
-    public int Position { get; set; }
-    public string Text { get; set; } = string.Empty;
-}
-
 /// <summary>
 /// Un formulario compartido con un usuario. La clave es el par (FormId, UserId):
 /// compartir otra vez con la misma persona cambia el permiso, no duplica.

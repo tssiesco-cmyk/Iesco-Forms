@@ -30,9 +30,6 @@ DROP TABLE IF EXISTS dbo.ResponseAnswerOptions;
 DROP TABLE IF EXISTS dbo.ResponseAnswers;
 DROP TABLE IF EXISTS dbo.ResponseRespondentValues;
 DROP TABLE IF EXISTS dbo.Responses;
-DROP TABLE IF EXISTS dbo.TemplateQuestionOptions;
-DROP TABLE IF EXISTS dbo.TemplateQuestions;
-DROP TABLE IF EXISTS dbo.Templates;
 DROP TABLE IF EXISTS dbo.FormLinks;
 DROP TABLE IF EXISTS dbo.FormShares;
 DROP TABLE IF EXISTS dbo.Notifications;
@@ -361,49 +358,6 @@ GO
 
 CREATE UNIQUE INDEX UX_FormLinks_Token ON dbo.FormLinks (Token);
 CREATE INDEX IX_FormLinks_Form ON dbo.FormLinks (FormId);
-GO
-
-/* ===========================================================================
-   PLANTILLAS (solo lectura desde la app)
-   =========================================================================== */
-CREATE TABLE dbo.Templates
-(
-    Id          VARCHAR(36)    NOT NULL CONSTRAINT PK_Templates PRIMARY KEY,
-    Name        NVARCHAR(200)  NOT NULL CONSTRAINT DF_Templates_Name        DEFAULT '',
-    Description NVARCHAR(1000) NOT NULL CONSTRAINT DF_Templates_Description DEFAULT '',
-    Category    NVARCHAR(100)  NOT NULL CONSTRAINT DF_Templates_Category    DEFAULT ''
-);
-GO
-
-CREATE TABLE dbo.TemplateQuestions
-(
-    Id         VARCHAR(36)   NOT NULL CONSTRAINT PK_TemplateQuestions PRIMARY KEY,
-    TemplateId VARCHAR(36)   NOT NULL,
-    Position   INT           NOT NULL CONSTRAINT DF_TemplateQuestions_Position DEFAULT 0,
-    Type       NVARCHAR(30)  NOT NULL,
-    Title      NVARCHAR(500) NOT NULL CONSTRAINT DF_TemplateQuestions_Title    DEFAULT '',
-    Required   BIT           NOT NULL CONSTRAINT DF_TemplateQuestions_Required DEFAULT 0,
-
-    CONSTRAINT CK_TemplateQuestions_Type     CHECK (Type IN ('short_text', 'long_text', 'single_choice', 'multiple_choice')),
-    CONSTRAINT FK_TemplateQuestions_Template FOREIGN KEY (TemplateId) REFERENCES dbo.Templates (Id) ON DELETE CASCADE
-);
-GO
-
-CREATE INDEX IX_TemplateQuestions_Template ON dbo.TemplateQuestions (TemplateId, Position);
-GO
-
-CREATE TABLE dbo.TemplateQuestionOptions
-(
-    Id                 VARCHAR(36)   NOT NULL CONSTRAINT PK_TemplateQuestionOptions PRIMARY KEY,
-    TemplateQuestionId VARCHAR(36)   NOT NULL,
-    Position           INT           NOT NULL CONSTRAINT DF_TQO_Position DEFAULT 0,
-    [Text]             NVARCHAR(500) NOT NULL CONSTRAINT DF_TQO_Text     DEFAULT '',
-
-    CONSTRAINT FK_TQO_TemplateQuestion FOREIGN KEY (TemplateQuestionId) REFERENCES dbo.TemplateQuestions (Id) ON DELETE CASCADE
-);
-GO
-
-CREATE INDEX IX_TQO_TemplateQuestion ON dbo.TemplateQuestionOptions (TemplateQuestionId, Position);
 GO
 
 /* ===========================================================================

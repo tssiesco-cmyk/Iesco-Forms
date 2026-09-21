@@ -24,9 +24,6 @@ public class IescoFormsDbContext(DbContextOptions<IescoFormsDbContext> options) 
     public DbSet<NotificationRow> Notifications => Set<NotificationRow>();
     public DbSet<FormShareRow> FormShares => Set<FormShareRow>();
     public DbSet<FormLinkRow> FormLinks => Set<FormLinkRow>();
-    public DbSet<TemplateRow> Templates => Set<TemplateRow>();
-    public DbSet<TemplateQuestionRow> TemplateQuestions => Set<TemplateQuestionRow>();
-    public DbSet<TemplateQuestionOptionRow> TemplateQuestionOptions => Set<TemplateQuestionOptionRow>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -222,40 +219,6 @@ public class IescoFormsDbContext(DbContextOptions<IescoFormsDbContext> options) 
                 .WithMany()
                 .HasForeignKey(x => x.FormId)
                 .OnDelete(DeleteBehavior.NoAction);
-        });
-
-        b.Entity<TemplateRow>(e =>
-        {
-            e.ToTable("Templates");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).HasColumnType("varchar(36)");
-
-            e.HasMany(x => x.Questions)
-                .WithOne()
-                .HasForeignKey(q => q.TemplateId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<TemplateQuestionRow>(e =>
-        {
-            e.ToTable("TemplateQuestions");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).HasColumnType("varchar(36)");
-            e.Property(x => x.TemplateId).HasColumnType("varchar(36)");
-
-            e.HasMany(x => x.Options)
-                .WithOne()
-                .HasForeignKey(o => o.TemplateQuestionId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<TemplateQuestionOptionRow>(e =>
-        {
-            e.ToTable("TemplateQuestionOptions");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).HasColumnType("varchar(36)");
-            e.Property(x => x.TemplateQuestionId).HasColumnType("varchar(36)");
-            e.Property(x => x.Text).HasColumnName("Text");
         });
     }
 }

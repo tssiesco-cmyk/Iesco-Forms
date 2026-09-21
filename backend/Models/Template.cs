@@ -3,6 +3,9 @@ namespace IescoForms.Api.Models;
 /// <summary>
 /// Plantilla de formulario. Es solo lectura: sirve de molde para crear
 /// formularios nuevos, no se edita desde la aplicacion.
+///
+/// El catalogo vive en el codigo, en <c>Services/SeedData.cs</c>, no en la base.
+/// Para cambiar una plantilla se edita ese archivo.
 /// </summary>
 public class Template
 {

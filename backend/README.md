@@ -118,6 +118,14 @@ de la opcion), arreglo de ids para opcion multiple.
 | GET | `/api/templates` | Las 9 plantillas |
 | GET | `/api/templates/{id}` | Una plantilla |
 
+Las plantillas no estan en la base: viven en `Services/SeedData.cs`. Son un
+catalogo fijo, igual para todos y de solo lectura, asi que se editan ahi y el
+cambio viaja en el repositorio como cualquier otro. Crear un formulario a partir
+de una plantilla si guarda una copia en `Forms`, independiente del original.
+
+En bases creadas antes de este cambio hay que ejecutar
+`Database/06_plantillas_en_codigo.sql`, que borra las tres tablas que sobran.
+
 ### Compartir
 
 Dos formas, las dos las decide solo el dueno (o un administrador):
