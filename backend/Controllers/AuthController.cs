@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace IescoForms.Api.Controllers;
 
@@ -13,6 +14,9 @@ namespace IescoForms.Api.Controllers;
 [Route("api/auth")]
 public class AuthController(IUserStore users, ILogger<AuthController> logger) : ControllerBase
 {
+    /// <summary>Nombre de la politica de limite de peticiones; se registra en Program.cs.</summary>
+    public const string ForgotPasswordPolicy = "forgot-password";
+
     /// <summary>
     /// Valida las credenciales y deja la sesion abierta en una cookie HttpOnly.
     /// El navegador la manda sola en cada peticion; el JavaScript no puede leerla,
@@ -54,6 +58,25 @@ public class AuthController(IUserStore users, ILogger<AuthController> logger) : 
 
         logger.LogInformation("{Email} inicio sesion.", user.Email);
         return Ok(user.ToProfile());
+    }
+
+    /// <summary>
+    /// "Olvide mi contrasena". Mientras no haya servidor de correo, deja una
+    /// solicitud que los administradores ven en Configuracion &gt; Usuarios.
+    ///
+    /// Responde siempre lo mismo, exista o no el correo: otra respuesta
+    /// permitiria averiguar que cuentas hay. El limite por IP evita que alguien
+    /// la use para llenar la lista de solicitudes.
+    /// </summary>
+    [AllowAnonymous]
+    [EnableRateLimiting(ForgotPasswordPolicy)]
+    [HttpPost("forgot-password")]
+    public IActionResult ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        users.RequestPasswordReset(request.Email);
+
+        logger.LogInformation("Solicitud de contrasena olvidada para {Email}.", request.Email);
+        return Accepted();
     }
 
     [HttpPost("logout")]

@@ -21,16 +21,24 @@ curl http://localhost:5080/api/health
 
 En desarrollo el esquema OpenAPI se publica en `/openapi/v1.json`.
 
-## Credenciales de desarrollo
+## Usuarios
 
-| Correo | Contrasena | Rol |
-|---|---|---|
-| admin@iescogroup.com | Iesco2026! | Administrador |
-| editor@iescogroup.com | Editor2026! | Editor |
+No hay usuarios ni contrasenas en el codigo ni en `appsettings`. Viven solo en la
+tabla `Users`, con la contrasena cifrada.
 
-Salen de `appsettings.Development.json` y se cifran al arrancar. Ese archivo esta
-en git: **no pongas ahi credenciales reales**, usa `appsettings.Local.json`, que
-esta ignorado.
+**Primer administrador** (o si se pierde el acceso de todos): con el backend
+detenido,
+
+```bash
+cd backend
+dotnet run -- crear-usuario
+```
+
+Pide los datos y escribe el `INSERT` (y un `UPDATE` para cambiar la contrasena)
+para ejecutarlo en SQL Server. No se conecta a la base.
+
+**El resto de usuarios** los crea un administrador desde la aplicacion, en
+Configuracion > Usuarios.
 
 ## Estado actual
 
@@ -109,6 +117,88 @@ de la opcion), arreglo de ids para opcion multiple.
 | DELETE | `/api/trash` | Vacia la papelera |
 | GET | `/api/templates` | Las 9 plantillas |
 | GET | `/api/templates/{id}` | Una plantilla |
+
+### Compartir
+
+Dos formas, las dos las decide solo el dueno (o un administrador):
+
+- **Privado:** con personas concretas, para editarlo entre varios. Lo ven en
+  Compartidos > Privados y lo abren en el editor.
+- **Publico:** todos los usuarios lo ven en Compartidos > Publicos y lo abren
+  para responder. Solo se lista mientras esta publicado. No da acceso al editor
+  ni a los resultados.
+
+| Metodo | Ruta | Que hace |
+|---|---|---|
+| GET | `/api/forms/{id}/shares` | Con quien esta compartido (solo el dueno) |
+| PUT | `/api/forms/{id}/shares/{userId}` | Lo comparte con esa persona para editar |
+| DELETE | `/api/forms/{id}/shares/{userId}` | Quita el acceso. Con el `userId` propio, uno se quita de un compartido |
+| PUT | `/api/forms/{id}/public` | Publico o no — `{ isPublic }` |
+| GET | `/api/forms/public` | Publicos y publicados de otros usuarios |
+| GET | `/api/directory/users` | Usuarios activos para elegir con quien compartir |
+
+Quien puede que:
+
+| | Responder | Editar, publicar y resultados | Compartir, papelera y borrar |
+|---|---|---|---|
+| Dueno / Administrador | si | si | si |
+| Compartido (privado) | si | si | no |
+| Cualquiera (si es publico) | si | no | no |
+
+Sin acceso, todo responde `404` como si el formulario no existiera. `GET /api/forms`
+devuelve los propios y los compartidos en privado; cada uno trae `access`
+(`owner` o `edit`), `sharedPermission` (si te lo compartieron), `ownerName` e
+`isPublic`. La papelera es de cada usuario. En bases creadas antes de estos
+cambios hay que ejecutar `Database/03_compartir_formularios.sql` y
+`Database/04_formularios_publicos.sql`.
+
+### Enlaces para responder que vencen
+
+| Metodo | Ruta | Que hace |
+|---|---|---|
+| GET | `/api/forms/{id}/links` | Enlaces del formulario (quien puede editarlo) |
+| POST | `/api/forms/{id}/links` | Crea uno — `{ expiresAt }` |
+| PATCH | `/api/forms/{id}/links/{linkId}` | Cambia la hora de vencimiento (sirve para reabrir) |
+| DELETE | `/api/forms/{id}/links/{linkId}` | Lo anula al momento |
+| GET | `/api/links/{token}` | Sin sesion: el formulario, si el enlace sigue vigente (`410` si vencio) |
+
+El enlace que se comparte es `/r/{token}`. Al vencer solo cae ese enlace; el
+formulario sigue abierto. Sin sesion ya no se puede leer un formulario por id ni
+responder sin un `?link={token}` vigente. Un enlace dura como mucho un ano. En
+bases creadas antes de este cambio hay que ejecutar
+`Database/05_enlaces_con_vencimiento.sql`.
+
+
+
+
+### Mi cuenta
+
+| Metodo | Ruta | Que hace |
+|---|---|---|
+| PATCH | `/api/account` | Cambia el nombre — `{ displayName }` |
+| POST | `/api/account/password` | `{ currentPassword, newPassword }` |
+
+### Usuarios (solo Administrador)
+
+| Metodo | Ruta | Que hace |
+|---|---|---|
+| GET | `/api/users` | Todos, incluidos los desactivados |
+| POST | `/api/users` | `{ email, displayName, role, password }` — `409` si el correo existe |
+| PATCH | `/api/users/{id}` | `displayName`, `role` o `isActive` |
+| POST | `/api/users/{id}/password` | Restablece la contrasena — `{ newPassword }`. Cierra la solicitud pendiente |
+| DELETE | `/api/users/{id}/password-request` | Descarta la solicitud de "Olvide mi contrasena" |
+
+**Olvide mi contrasena.** `POST /api/auth/forgot-password` — `{ email }`, sin
+sesion. Mientras no haya servidor de correo solo marca la solicitud
+(`Users.PasswordResetRequestedAt`) para que un administrador la atienda. Responde
+`202` exista o no el correo, y admite 5 peticiones cada 15 minutos por IP (`429`
+despues). En bases creadas antes de este cambio hay que ejecutar
+`Database/02_solicitud_contrasena.sql`.
+
+No hay borrado: se desactiva. Un administrador no puede quitarse el rol ni
+desactivarse a si mismo, y siempre queda al menos un administrador activo. Un
+usuario desactivado o al que le cambian el rol pierde la sesion en su siguiente
+peticion.
 
 ## Como esta organizado
 

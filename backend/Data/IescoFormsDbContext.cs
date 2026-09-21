@@ -22,6 +22,8 @@ public class IescoFormsDbContext(DbContextOptions<IescoFormsDbContext> options) 
     public DbSet<ResponseAnswerRow> ResponseAnswers => Set<ResponseAnswerRow>();
     public DbSet<ResponseAnswerOptionRow> ResponseAnswerOptions => Set<ResponseAnswerOptionRow>();
     public DbSet<NotificationRow> Notifications => Set<NotificationRow>();
+    public DbSet<FormShareRow> FormShares => Set<FormShareRow>();
+    public DbSet<FormLinkRow> FormLinks => Set<FormLinkRow>();
     public DbSet<TemplateRow> Templates => Set<TemplateRow>();
     public DbSet<TemplateQuestionRow> TemplateQuestions => Set<TemplateQuestionRow>();
     public DbSet<TemplateQuestionOptionRow> TemplateQuestionOptions => Set<TemplateQuestionOptionRow>();
@@ -163,6 +165,41 @@ public class IescoFormsDbContext(DbContextOptions<IescoFormsDbContext> options) 
                 .WithMany()
                 .HasForeignKey(x => x.OptionId)
                 .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        b.Entity<FormLinkRow>(e =>
+        {
+            e.ToTable("FormLinks");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnType("varchar(36)");
+            e.Property(x => x.FormId).HasColumnType("varchar(36)");
+            e.Property(x => x.Token).HasColumnType("varchar(32)");
+            e.Property(x => x.CreatedBy).HasColumnType("varchar(36)");
+            e.HasIndex(x => x.Token).IsUnique();
+
+            e.HasOne<FormRow>()
+                .WithMany()
+                .HasForeignKey(x => x.FormId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        b.Entity<FormShareRow>(e =>
+        {
+            e.ToTable("FormShares");
+            e.HasKey(x => new { x.FormId, x.UserId });
+            e.Property(x => x.FormId).HasColumnType("varchar(36)");
+            e.Property(x => x.UserId).HasColumnType("varchar(36)");
+            e.Property(x => x.SharedBy).HasColumnType("varchar(36)");
+
+            e.HasOne<FormRow>()
+                .WithMany()
+                .HasForeignKey(x => x.FormId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne<UserRow>()
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<NotificationRow>(e =>

@@ -4,19 +4,34 @@ using IescoForms.Api.Models;
 namespace IescoForms.Api.Services;
 
 /// <summary>
-/// Carga en SQL Server lo minimo para que la aplicacion sea usable: los usuarios
-/// de la seccion "SeedUsers" de appsettings.
+/// Carga en SQL Server lo minimo para que la aplicacion sea usable: el catalogo
+/// de plantillas.
 ///
-/// Solo inserta lo que falta. Nunca pisa una fila existente, porque hacerlo
-/// devolveria la contrasena del archivo a alguien que ya se la habia cambiado.
-/// Por eso se puede ejecutar en cada arranque sin pensarlo.
+/// Los usuarios no se siembran: ninguna contrasena vive en el codigo ni en la
+/// configuracion. El primer administrador se crea con
+/// "dotnet run -- crear-usuario" y los demas desde Configuracion > Usuarios.
+///
+/// Solo inserta lo que falta, asi que se puede ejecutar en cada arranque.
 /// </summary>
 public static class DatabaseSeeder
 {
-    public static void Run(IescoFormsDbContext db, IConfiguration configuration, ILogger logger)
+    public static void Run(IescoFormsDbContext db, ILogger logger)
     {
-        SembrarUsuarios(db, configuration, logger);
+        ComprobarAdministrador(db, logger);
         SembrarPlantillas(db, logger);
+    }
+
+    /// <summary>
+    /// Sin un administrador activo nadie puede crear usuarios desde la
+    /// aplicacion. No se arregla solo: se avisa de como hacerlo.
+    /// </summary>
+    private static void ComprobarAdministrador(IescoFormsDbContext db, ILogger logger)
+    {
+        if (db.Users.Any(u => u.IsActive && u.Role == UserRole.Admin)) return;
+
+        logger.LogError(
+            "No hay ningun administrador activo en la base: nadie podra gestionar usuarios. " +
+            "Crea uno con 'dotnet run -- crear-usuario' y ejecuta el INSERT que genera.");
     }
 
     /// <summary>
@@ -81,68 +96,5 @@ public static class DatabaseSeeder
             db.SaveChanges();
             logger.LogInformation("Plantillas creadas en la base: {Count}.", creadas);
         }
-    }
-
-    private static void SembrarUsuarios(IescoFormsDbContext db, IConfiguration configuration, ILogger logger)
-    {
-        var seeds = configuration.GetSection("SeedUsers").Get<SeedUser[]>() ?? [];
-
-        if (seeds.Length == 0)
-        {
-            logger.LogError(
-                "No hay ningun usuario configurado: nadie podra entrar. " +
-                "Define la seccion 'SeedUsers' en appsettings.");
-            return;
-        }
-
-        var creados = 0;
-
-        foreach (var seed in seeds)
-        {
-            if (string.IsNullOrWhiteSpace(seed.Email) || string.IsNullOrWhiteSpace(seed.Password))
-            {
-                logger.LogWarning("Usuario de ejemplo ignorado: falta el correo o la contrasena.");
-                continue;
-            }
-
-            // Derivado del correo, igual que en el almacen en memoria: asi los
-            // formularios que ya referencian a este usuario siguen cuadrando.
-            var id = UserIdentity.ForEmail(seed.Email);
-
-            if (db.Users.Any(u => u.Id == id)) continue;
-
-            db.Users.Add(new UserRow
-            {
-                Id = id,
-                Email = seed.Email.Trim().ToLowerInvariant(),
-                DisplayName = string.IsNullOrWhiteSpace(seed.DisplayName) ? seed.Email : seed.DisplayName,
-                Role = UserRole.IsValid(seed.Role) ? seed.Role! : UserRole.Editor,
-                // La contrasena llega en claro desde el archivo y se cifra aqui:
-                // en la base nunca queda el texto original.
-                PasswordHash = PasswordHasher.Hash(seed.Password),
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-
-            creados++;
-        }
-
-        if (creados > 0)
-        {
-            db.SaveChanges();
-            logger.LogInformation("Usuarios creados en la base: {Count}.", creados);
-        }
-        else
-        {
-            logger.LogInformation("Los usuarios de configuracion ya estaban en la base.");
-        }
-    }
-
-    private sealed class SeedUser
-    {
-        public string? Email { get; set; }
-        public string? Password { get; set; }
-        public string? DisplayName { get; set; }
-        public string? Role { get; set; }
     }
 }

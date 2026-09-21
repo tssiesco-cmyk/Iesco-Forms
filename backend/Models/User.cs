@@ -27,3 +27,15 @@ public class User
 
 /// <summary>Lo unico del usuario que sale hacia el cliente.</summary>
 public record UserProfile(string Id, string Email, string DisplayName, string Role);
+
+/// <summary>
+/// Lo que ve un administrador en la lista de usuarios. Tampoco lleva el hash.
+/// </summary>
+public record UserSummary(
+    string Id,
+    string Email,
+    string DisplayName,
+    string Role,
+    bool IsActive,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? PasswordResetRequestedAt);

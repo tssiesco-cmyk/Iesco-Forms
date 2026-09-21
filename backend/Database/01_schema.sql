@@ -33,6 +33,8 @@ DROP TABLE IF EXISTS dbo.Responses;
 DROP TABLE IF EXISTS dbo.TemplateQuestionOptions;
 DROP TABLE IF EXISTS dbo.TemplateQuestions;
 DROP TABLE IF EXISTS dbo.Templates;
+DROP TABLE IF EXISTS dbo.FormLinks;
+DROP TABLE IF EXISTS dbo.FormShares;
 DROP TABLE IF EXISTS dbo.Notifications;
 DROP TABLE IF EXISTS dbo.QuestionOptions;
 DROP TABLE IF EXISTS dbo.Questions;
@@ -56,6 +58,10 @@ CREATE TABLE dbo.Users
     -- a alguien sin borrarlo y perder la autoria de sus formularios.
     IsActive      BIT             NOT NULL CONSTRAINT DF_Users_IsActive  DEFAULT 1,
     CreatedAt     DATETIMEOFFSET  NOT NULL CONSTRAINT DF_Users_CreatedAt DEFAULT SYSDATETIMEOFFSET(),
+
+    -- Cuando el usuario pulso "Olvide mi contrasena". NULL = no hay solicitud
+    -- pendiente. Se limpia al ponerle una contrasena nueva.
+    PasswordResetRequestedAt DATETIMEOFFSET NULL,
 
     CONSTRAINT CK_Users_Role CHECK (Role IN ('Administrador', 'Editor'))
 );
@@ -92,6 +98,10 @@ CREATE TABLE dbo.Forms
     BackgroundOverlay     BIT            NOT NULL CONSTRAINT DF_Forms_BackgroundOverlay     DEFAULT 1,
     BackgroundPerQuestion BIT            NOT NULL CONSTRAINT DF_Forms_BackgroundPerQuestion DEFAULT 0,
     IntroBackgroundImage  NVARCHAR(400)  NOT NULL CONSTRAINT DF_Forms_IntroBackgroundImage  DEFAULT '',
+
+    -- Visible para todos los usuarios en Compartidos > Publicos, para responderlo.
+    -- Solo se lista mientras esta publicado.
+    IsPublic              BIT            NOT NULL CONSTRAINT DF_Forms_IsPublic DEFAULT 0,
 
     RowVersion            ROWVERSION     NOT NULL,
 
@@ -275,7 +285,7 @@ CREATE TABLE dbo.Notifications
 
     CONSTRAINT CK_Notifications_Type CHECK (Type IN (
         'new_responses', 'form_published', 'form_unpublished',
-        'form_updated', 'form_trashed', 'form_restored')),
+        'form_updated', 'form_trashed', 'form_restored', 'form_shared')),
     CONSTRAINT FK_Notifications_User FOREIGN KEY (UserId) REFERENCES dbo.Users (Id) ON DELETE CASCADE,
 
     -- Sin cascada a proposito. Con ella habria dos caminos de borrado desde
@@ -291,6 +301,66 @@ CREATE INDEX IX_Notifications_NoLeidos ON dbo.Notifications (UserId, UpdatedAt D
 
 -- Record() busca un aviso sin leer del mismo tipo y formulario para sumarle.
 CREATE INDEX IX_Notifications_Agrupar ON dbo.Notifications (UserId, FormId, Type) WHERE ReadAt IS NULL;
+GO
+
+/* ===========================================================================
+   COMPARTIR
+   =========================================================================== */
+CREATE TABLE dbo.FormShares
+(
+    FormId     VARCHAR(36)    NOT NULL,
+    UserId     VARCHAR(36)    NOT NULL,
+
+    -- Hoy siempre 'edit': compartir con alguien es para editar entre varios.
+    -- 'view' se admite por compatibilidad pero la aplicacion ya no lo usa.
+    Permission NVARCHAR(10)   NOT NULL,
+
+    -- Quien lo compartio. Sin clave foranea: es un dato historico.
+    SharedBy   VARCHAR(36)    NULL,
+    SharedAt   DATETIMEOFFSET NOT NULL CONSTRAINT DF_FormShares_SharedAt DEFAULT SYSDATETIMEOFFSET(),
+
+    CONSTRAINT PK_FormShares PRIMARY KEY (FormId, UserId),
+    CONSTRAINT CK_FormShares_Permission CHECK (Permission IN ('edit', 'view')),
+
+    -- Sin cascada hacia Forms por el mismo motivo que en Notifications: SQL
+    -- Server rechaza dos caminos de borrado desde Users. El borrado definitivo
+    -- de un formulario limpia esta tabla a mano.
+    CONSTRAINT FK_FormShares_Form FOREIGN KEY (FormId) REFERENCES dbo.Forms (Id),
+    CONSTRAINT FK_FormShares_User FOREIGN KEY (UserId) REFERENCES dbo.Users (Id) ON DELETE CASCADE
+);
+GO
+
+-- "Compartidos conmigo" busca por usuario.
+CREATE INDEX IX_FormShares_User ON dbo.FormShares (UserId);
+GO
+
+/* ===========================================================================
+   ENLACES PARA RESPONDER QUE VENCEN
+   =========================================================================== */
+CREATE TABLE dbo.FormLinks
+(
+    Id        VARCHAR(36)    NOT NULL CONSTRAINT PK_FormLinks PRIMARY KEY,
+    FormId    VARCHAR(36)    NOT NULL,
+
+    -- Lo que va en la URL (/r/<Token>). Aleatorio y largo para que no se adivine.
+    Token     VARCHAR(32)    NOT NULL,
+
+    -- Pasada esta hora el enlace deja de abrir el formulario. El formulario
+    -- sigue abierto: solo cae este enlace.
+    ExpiresAt DATETIMEOFFSET NOT NULL,
+
+    -- Quien lo creo. Sin clave foranea: es un dato historico.
+    CreatedBy VARCHAR(36)    NULL,
+    CreatedAt DATETIMEOFFSET NOT NULL CONSTRAINT DF_FormLinks_CreatedAt DEFAULT SYSDATETIMEOFFSET(),
+
+    -- Sin cascada por el mismo motivo que FormShares: el borrado definitivo de
+    -- un formulario limpia esta tabla a mano.
+    CONSTRAINT FK_FormLinks_Form FOREIGN KEY (FormId) REFERENCES dbo.Forms (Id)
+);
+GO
+
+CREATE UNIQUE INDEX UX_FormLinks_Token ON dbo.FormLinks (Token);
+CREATE INDEX IX_FormLinks_Form ON dbo.FormLinks (FormId);
 GO
 
 /* ===========================================================================

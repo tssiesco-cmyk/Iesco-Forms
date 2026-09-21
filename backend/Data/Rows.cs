@@ -20,6 +20,9 @@ public class UserRow
     public string PasswordHash { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>Solicitud pendiente de "Olvide mi contrasena", o null.</summary>
+    public DateTimeOffset? PasswordResetRequestedAt { get; set; }
 }
 
 public class FormRow
@@ -48,6 +51,9 @@ public class FormRow
     public bool BackgroundOverlay { get; set; } = true;
     public bool BackgroundPerQuestion { get; set; }
     public string IntroBackgroundImage { get; set; } = string.Empty;
+
+    /// <summary>Visible para todos en Compartidos &gt; Publicos.</summary>
+    public bool IsPublic { get; set; }
 
     /// <summary>Control de concurrencia. Lo maneja SQL Server, nunca se asigna.</summary>
     public byte[]? RowVersion { get; set; }
@@ -192,4 +198,31 @@ public class TemplateQuestionOptionRow
     public string TemplateQuestionId { get; set; } = string.Empty;
     public int Position { get; set; }
     public string Text { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Un formulario compartido con un usuario. La clave es el par (FormId, UserId):
+/// compartir otra vez con la misma persona cambia el permiso, no duplica.
+/// </summary>
+public class FormShareRow
+{
+    public string FormId { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+
+    /// <summary>edit o view. Ver Models.SharePermission.</summary>
+    public string Permission { get; set; } = string.Empty;
+
+    public string? SharedBy { get; set; }
+    public DateTimeOffset SharedAt { get; set; }
+}
+
+/// <summary>Enlace para responder un formulario sin sesion, hasta que vence.</summary>
+public class FormLinkRow
+{
+    public string Id { get; set; } = string.Empty;
+    public string FormId { get; set; } = string.Empty;
+    public string Token { get; set; } = string.Empty;
+    public DateTimeOffset ExpiresAt { get; set; }
+    public string? CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }

@@ -1,0 +1,101 @@
+using System.Security.Claims;
+using IescoForms.Api.Contracts;
+using IescoForms.Api.Models;
+using IescoForms.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace IescoForms.Api.Controllers;
+
+/// <summary>
+/// Gestion de usuarios. Solo para administradores: un Editor recibe 403.
+///
+/// No hay borrado: se desactiva. Borrar a alguien dejaria sin dueno sus
+/// formularios y, mas adelante, sin autor su actividad.
+/// </summary>
+[ApiController]
+[Authorize(Roles = UserRole.Admin)]
+[Route("api/users")]
+public class UsersController(IUserStore users, ILogger<UsersController> logger) : ControllerBase
+{
+    private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+
+    [HttpGet]
+    public ActionResult<IReadOnlyList<UserSummary>> GetAll() => Ok(users.List());
+
+    [HttpPost]
+    public ActionResult<UserSummary> Create([FromBody] CreateUserRequest request)
+    {
+        if (!UserRole.IsValid(request.Role))
+            return Problem($"El rol tiene que ser {UserRole.Admin} o {UserRole.Editor}.", statusCode: StatusCodes.Status400BadRequest);
+
+        if (string.IsNullOrWhiteSpace(request.DisplayName))
+            return Problem("El nombre es obligatorio.", statusCode: StatusCodes.Status400BadRequest);
+
+        // Tambien cuenta a los desactivados: el correo es unico en la tabla.
+        if (users.EmailExists(request.Email))
+            return Problem("Ya existe un usuario con ese correo.", statusCode: StatusCodes.Status409Conflict);
+
+        var created = users.Create(request.Email, request.DisplayName, request.Role, request.Password);
+
+        logger.LogInformation("{AdminId} creo el usuario {Email} ({Role}).", CurrentUserId, created.Email, created.Role);
+        return Created($"/api/users/{created.Id}", created);
+    }
+
+    [HttpPatch("{id}")]
+    public ActionResult<UserSummary> Update(string id, [FromBody] UpdateUserRequest request)
+    {
+        var existing = users.GetSummary(id);
+        if (existing is null) return NotFound();
+
+        if (request.Role is not null && !UserRole.IsValid(request.Role))
+            return Problem($"El rol tiene que ser {UserRole.Admin} o {UserRole.Editor}.", statusCode: StatusCodes.Status400BadRequest);
+
+        if (request.DisplayName is not null && string.IsNullOrWhiteSpace(request.DisplayName))
+            return Problem("El nombre no puede quedar vacio.", statusCode: StatusCodes.Status400BadRequest);
+
+        var pierdeAdmin = existing.IsActive && existing.Role == UserRole.Admin &&
+            (request.IsActive == false || (request.Role is not null && request.Role != UserRole.Admin));
+
+        if (pierdeAdmin)
+        {
+            // Quitarse el rol a uno mismo lo echaria de esta pantalla a mitad de uso.
+            if (id == CurrentUserId)
+                return Problem("No puedes quitarte el rol de administrador ni desactivar tu propia cuenta.", statusCode: StatusCodes.Status400BadRequest);
+
+            // Sin ningun administrador activo nadie podria volver a gestionar usuarios.
+            if (users.CountActiveAdmins() <= 1)
+                return Problem("Tiene que quedar al menos un administrador activo.", statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var updated = users.Update(id, request.DisplayName, request.Role, request.IsActive);
+        if (updated is null) return NotFound();
+
+        logger.LogInformation("{AdminId} modifico el usuario {Email}.", CurrentUserId, updated.Email);
+        return Ok(updated);
+    }
+
+    /// <summary>
+    /// Pone una contrasena nueva sin pedir la anterior. Es para quien la olvido;
+    /// cambiar la propia se hace desde Mi cuenta.
+    /// </summary>
+    [HttpPost("{id}/password")]
+    public IActionResult ResetPassword(string id, [FromBody] ResetPasswordRequest request)
+    {
+        if (!users.SetPassword(id, request.NewPassword)) return NotFound();
+
+        logger.LogInformation("{AdminId} restablecio la contrasena del usuario {UserId}.", CurrentUserId, id);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Descarta una solicitud de "Olvide mi contrasena" sin cambiar nada, por
+    /// ejemplo si la pidio alguien que no era el dueno de la cuenta.
+    /// </summary>
+    [HttpDelete("{id}/password-request")]
+    public ActionResult<UserSummary> DismissPasswordRequest(string id)
+    {
+        var updated = users.DismissPasswordReset(id);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+}

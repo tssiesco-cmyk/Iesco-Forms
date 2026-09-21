@@ -1,8 +1,20 @@
+using System.Security.Claims;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using IescoForms.Api.Controllers;
 using IescoForms.Api.Data;
 using IescoForms.Api.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+
+// "dotnet run -- crear-usuario" genera el INSERT de un usuario y termina, sin
+// levantar la API ni conectarse a la base.
+if (args.Length > 0 && args[0] == CrearUsuarioCommand.Name)
+{
+    CrearUsuarioCommand.Run();
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,9 +69,42 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return Task.CompletedTask;
         };
+
+        // La cookie guarda el rol del momento en que se entro. Sin esta
+        // comprobacion, un usuario desactivado o al que le quitaron el rol de
+        // administrador seguiria entrando con su cookie hasta que caducara.
+        // Cuesta una consulta por peticion contra la clave primaria.
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var id = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var store = context.HttpContext.RequestServices.GetRequiredService<IUserStore>();
+            var user = id is null ? null : store.FindById(id);
+
+            if (user is null || !context.Principal!.IsInRole(user.Role))
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
+
+// "Olvide mi contrasena" no pide sesion: sin limite, cualquiera podria llenar
+// la lista de solicitudes de los administradores. 5 cada 15 minutos por IP
+// sobra para quien de verdad la olvido.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(AuthController.ForgotPasswordPolicy, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(15),
+            }));
+});
 
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
@@ -80,19 +125,25 @@ builder.Services.AddScoped<IFormStore, SqlFormStore>();
 // singleton no puede quedarse con uno guardado.
 builder.Services.AddScoped<IUserStore, SqlUserStore>();
 builder.Services.AddScoped<INotificationStore, SqlNotificationStore>();
+builder.Services.AddScoped<IFormShareStore, SqlFormShareStore>();
+builder.Services.AddScoped<IFormLinkStore, SqlFormLinkStore>();
+
+// Decide que puede hacer el usuario conectado con cada formulario. Lee el
+// usuario de la peticion, por eso necesita el HttpContext.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<FormAccess>();
 builder.Services.AddSingleton<ImageStorage>();
 
 var app = builder.Build();
 
-// Los usuarios de configuracion tienen que existir en la base antes de que
-// alguien intente entrar. Solo inserta lo que falta, asi que correrlo en cada
-// arranque no pisa nada.
+// Carga las plantillas que falten y avisa si no queda ningun administrador.
+// Solo inserta lo que falta, asi que correrlo en cada arranque no pisa nada.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<IescoFormsDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    DatabaseSeeder.Run(db, app.Configuration, logger);
+    DatabaseSeeder.Run(db, logger);
 }
 
 app.UseExceptionHandler();
@@ -111,6 +162,7 @@ app.UseCors(FrontendCors);
 // El orden importa: primero se averigua quien es, despues si puede.
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 

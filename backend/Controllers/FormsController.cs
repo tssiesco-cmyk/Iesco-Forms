@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using IescoForms.Api.Contracts;
 using IescoForms.Api.Models;
 using IescoForms.Api.Services;
@@ -13,18 +12,10 @@ namespace IescoForms.Api.Controllers;
 public class FormsController(
     IFormStore store,
     INotificationStore notifications,
-    ImageStorage images) : ControllerBase
+    ImageStorage images,
+    FormAccess access) : ControllerBase
 {
-    private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-
-    private bool IsAdmin => User.IsInRole(UserRole.Admin);
-
-    /// <summary>
-    /// Un Administrador ve todo. Un Editor, solo lo suyo y lo que no tiene dueno
-    /// (formularios creados antes de que existiera este campo).
-    /// </summary>
-    private bool CanAccess(Form form) =>
-        IsAdmin || string.IsNullOrEmpty(form.OwnerId) || form.OwnerId == CurrentUserId;
+    private string CurrentUserId => access.CurrentUserId;
 
     /// <summary>
     /// Avisa al dueno de un cambio en su formulario. Se avisa aunque el cambio lo
@@ -36,41 +27,62 @@ public class FormsController(
         notifications.Record(form.OwnerId, type, form.Id, form.Title);
 
     /// <summary>
-    /// Devuelve el formulario solo si el usuario puede tocarlo. Al no poder, se
-    /// responde como si no existiera: un 403 confirmaria que ese id es de otro.
+    /// Devuelve el formulario solo si el usuario llega al nivel pedido. Si no,
+    /// se responde como si no existiera: un 403 confirmaria que ese id es de otro.
+    /// Quien solo tiene permiso de ver tampoco recibe un 403 al intentar editar,
+    /// por lo mismo.
     /// </summary>
-    private Form? Accessible(string id)
+    private Form? WithLevel(string id, FormAccessLevel minimum)
     {
         var form = store.GetForm(id);
-        return form is not null && CanAccess(form) ? form : null;
+        return form is not null && access.LevelFor(form) >= minimum ? form : null;
     }
+
+    /// <summary>Dueno o compartido con permiso de edicion.</summary>
+    private Form? Editable(string id) => WithLevel(id, FormAccessLevel.Edit);
 
     // --- Formularios ---
 
     [HttpGet]
     public ActionResult<IReadOnlyList<Form>> GetAll() =>
-        Ok(store.GetForms().Where(CanAccess).ToList());
+        Ok(access.VisibleWithAccess(store.GetForms()));
 
     /// <summary>
-    /// Abierto a proposito: quien recibe el enlace de un formulario publicado
-    /// tiene que poder leerlo sin cuenta. Los borradores siguen siendo privados,
-    /// para que nadie vea un formulario a medias adivinando su id.
+    /// Formularios publicos de otros usuarios, para responderlos. Solo los
+    /// publicados: un borrador no acepta respuestas. Los propios no salen aqui,
+    /// ya estan en Mis formularios.
     /// </summary>
-    [AllowAnonymous]
+    [HttpGet("public")]
+    public ActionResult<IReadOnlyList<Form>> GetPublic() =>
+        Ok(access.WithOwnerNames(store.GetForms()
+            .Where(f => f.IsPublic && f.Status == FormStatus.Active && f.OwnerId != CurrentUserId)
+            .ToList()));
+
+    /// <summary>
+    /// Con sesion, un formulario publicado lo puede leer cualquiera (para
+    /// responderlo); un borrador solo quien tiene acceso. Sin sesion no se lee
+    /// por id: para responder sin cuenta estan los enlaces que vencen
+    /// (/api/links/{token}), y si el id bastara el vencimiento no serviria.
+    /// </summary>
     [HttpGet("{id}")]
     public ActionResult<Form> GetById(string id)
     {
         var form = store.GetForm(id);
         if (form is null) return FormNotFound(id);
 
-        // Publicado: lo puede leer cualquiera, es el enlace que se comparte.
-        if (form.Status == FormStatus.Active) return Ok(form);
+        var level = access.LevelFor(form);
 
-        // Borrador: solo su dueno (o un administrador). Se responde 404 y no 401
-        // a proposito, para no confirmar que ese id existe.
-        if (User.Identity?.IsAuthenticated != true || !CanAccess(form)) return FormNotFound(id);
+        // Publicado: lo puede leer cualquier usuario. Si ademas tiene acceso, se
+        // le dice que puede hacer con el.
+        if (form.Status == FormStatus.Active)
+            return Ok(level == FormAccessLevel.None ? form : access.WithAccess(form));
 
-        return Ok(form);
+        // Borrador: solo quien tiene acceso (dueno, administrador o alguien con
+        // quien se compartio). Se responde 404 y no 401 a proposito, para no
+        // confirmar que ese id existe.
+        if (level == FormAccessLevel.None) return FormNotFound(id);
+
+        return Ok(access.WithAccess(form));
     }
 
     [HttpPost]
@@ -79,7 +91,7 @@ public class FormsController(
         var form = store.CreateForm(request.Title, request.Description, CurrentUserId);
         Notify(form, NotificationType.FormUpdated);
 
-        return CreatedAtAction(nameof(GetById), new { id = form.Id }, form);
+        return CreatedAtAction(nameof(GetById), new { id = form.Id }, access.WithAccess(form));
     }
 
     [HttpPost("from-template/{templateId}")]
@@ -88,7 +100,7 @@ public class FormsController(
         var form = store.CreateFormFromTemplate(templateId, CurrentUserId);
         return form is null
             ? Problem($"No existe la plantilla '{templateId}'.", statusCode: StatusCodes.Status404NotFound)
-            : CreatedAtAction(nameof(GetById), new { id = form.Id }, form);
+            : CreatedAtAction(nameof(GetById), new { id = form.Id }, access.WithAccess(form));
     }
 
     [HttpPatch("{id}")]
@@ -101,7 +113,7 @@ public class FormsController(
             return ValidationProblem(ModelState);
         }
 
-        var before = Accessible(id);
+        var before = Editable(id);
         if (before is null) return FormNotFound(id);
 
         // Se copia antes de actualizar: el almacen devuelve el mismo objeto y
@@ -122,14 +134,17 @@ public class FormsController(
             Notify(form, NotificationType.FormUpdated);
         }
 
-        return Ok(form);
+        return Ok(access.WithAccess(form));
     }
 
-    /// <summary>Manda el formulario a la papelera. No lo borra: se puede restaurar.</summary>
+    /// <summary>
+    /// Manda el formulario a la papelera. No lo borra: se puede restaurar.
+    /// Solo el dueno: quien lo tiene compartido no puede hacerlo desaparecer.
+    /// </summary>
     [HttpDelete("{id}")]
     public IActionResult Trash(string id)
     {
-        var form = Accessible(id);
+        var form = WithLevel(id, FormAccessLevel.Owner);
         if (form is null || !store.TrashForm(id)) return FormNotFound(id);
 
         Notify(form, NotificationType.FormTrashed);
@@ -148,7 +163,7 @@ public class FormsController(
             return ValidationProblem(ModelState);
         }
 
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         var question = store.AddQuestion(id, request.Type);
@@ -161,7 +176,7 @@ public class FormsController(
     [HttpPost("{id}/questions/{questionId}/duplicate")]
     public ActionResult<Question> DuplicateQuestion(string id, string questionId)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         var question = store.DuplicateQuestion(id, questionId);
@@ -174,7 +189,7 @@ public class FormsController(
     [HttpPatch("{id}/questions/{questionId}")]
     public ActionResult<Question> UpdateQuestion(string id, string questionId, [FromBody] UpdateQuestionRequest request)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         // Null significa "no lo toques"; cualquier otro valor tiene que ser uno
@@ -196,7 +211,7 @@ public class FormsController(
     [HttpDelete("{id}/questions/{questionId}")]
     public IActionResult DeleteQuestion(string id, string questionId)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return QuestionNotFound(id, questionId);
 
         // Se anota la imagen antes de borrar: despues ya no hay de donde sacarla.
@@ -213,7 +228,7 @@ public class FormsController(
     [HttpPost("{id}/questions/reorder")]
     public IActionResult ReorderQuestions(string id, [FromBody] ReorderQuestionsRequest request)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         if (!store.ReorderQuestions(id, request.FromIndex, request.ToIndex))
@@ -231,7 +246,7 @@ public class FormsController(
     [HttpPost("{id}/questions/{questionId}/options")]
     public ActionResult<QuestionOption> AddOption(string id, string questionId)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         var option = store.AddOption(id, questionId);
@@ -248,7 +263,7 @@ public class FormsController(
     [HttpPatch("{id}/questions/{questionId}/options/{optionId}")]
     public IActionResult UpdateOption(string id, string questionId, string optionId, [FromBody] UpdateOptionRequest request)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null || !store.UpdateOption(id, questionId, optionId, request.Text))
         {
             return Problem($"No se encontro la opcion '{optionId}'.", statusCode: StatusCodes.Status404NotFound);
@@ -261,7 +276,7 @@ public class FormsController(
     [HttpDelete("{id}/questions/{questionId}/options/{optionId}")]
     public IActionResult DeleteOption(string id, string questionId, string optionId)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null || !store.DeleteOption(id, questionId, optionId))
         {
             return Problem($"No se encontro la opcion '{optionId}'.", statusCode: StatusCodes.Status404NotFound);
@@ -276,7 +291,7 @@ public class FormsController(
     [HttpPost("{id}/intro-fields")]
     public ActionResult<IntroField> AddIntroField(string id, [FromBody] AddIntroFieldRequest request)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         var field = store.AddIntroField(id, request.Type);
@@ -289,7 +304,7 @@ public class FormsController(
     [HttpPatch("{id}/intro-fields/{fieldId}")]
     public IActionResult UpdateIntroField(string id, string fieldId, [FromBody] UpdateIntroFieldRequest request)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null || !store.UpdateIntroField(id, fieldId, request.Label, request.Placeholder, request.Required, request.Enabled))
         {
             return Problem($"No se encontro el campo '{fieldId}'.", statusCode: StatusCodes.Status404NotFound);
@@ -302,7 +317,7 @@ public class FormsController(
     [HttpDelete("{id}/intro-fields/{fieldId}")]
     public IActionResult RemoveIntroField(string id, string fieldId)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null || !store.RemoveIntroField(id, fieldId))
         {
             return Problem($"No se encontro el campo '{fieldId}'.", statusCode: StatusCodes.Status404NotFound);
@@ -325,7 +340,7 @@ public class FormsController(
     public async Task<ActionResult<Form>> UploadBackground(
         string id, IFormFile file, CancellationToken cancellationToken)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         if (file is null) return Problem("No llego ningun archivo.", statusCode: StatusCodes.Status400BadRequest);
@@ -341,34 +356,34 @@ public class FormsController(
         images.Delete(previous);
 
         Notify(form, NotificationType.FormUpdated);
-        return Ok(store.GetForm(id));
+        return Ok(access.WithAccess(store.GetForm(id)!));
     }
 
     /// <summary>Quita el fondo y borra su archivo.</summary>
     [HttpDelete("{id}/background")]
     public ActionResult<Form> RemoveBackground(string id)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         var previous = store.SetBackground(id, string.Empty, null, null);
         images.Delete(previous);
 
         Notify(form, NotificationType.FormUpdated);
-        return Ok(store.GetForm(id));
+        return Ok(access.WithAccess(store.GetForm(id)!));
     }
 
     /// <summary>Activa o desactiva el velo oscuro sobre la imagen.</summary>
     [HttpPatch("{id}/background")]
     public ActionResult<Form> UpdateBackground(string id, [FromBody] UpdateBackgroundRequest request)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         store.SetBackground(id, null, request.Overlay, request.PerQuestion);
         Notify(form, NotificationType.FormUpdated);
 
-        return Ok(store.GetForm(id));
+        return Ok(access.WithAccess(store.GetForm(id)!));
     }
 
     /// <summary>
@@ -380,7 +395,7 @@ public class FormsController(
     public async Task<ActionResult<Form>> UploadQuestionBackground(
         string id, string questionId, IFormFile file, CancellationToken cancellationToken)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         if (!form.Questions.Any(q => q.Id == questionId)) return QuestionNotFound(id, questionId);
@@ -397,13 +412,13 @@ public class FormsController(
         images.Delete(previous);
 
         Notify(form, NotificationType.FormUpdated);
-        return Ok(store.GetForm(id));
+        return Ok(access.WithAccess(store.GetForm(id)!));
     }
 
     [HttpDelete("{id}/questions/{questionId}/background")]
     public ActionResult<Form> RemoveQuestionBackground(string id, string questionId)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
         if (!form.Questions.Any(q => q.Id == questionId)) return QuestionNotFound(id, questionId);
 
@@ -411,7 +426,7 @@ public class FormsController(
         images.Delete(previous);
 
         Notify(form, NotificationType.FormUpdated);
-        return Ok(store.GetForm(id));
+        return Ok(access.WithAccess(store.GetForm(id)!));
     }
 
     /// <summary>Imagen propia de la pantalla de datos del respondedor.</summary>
@@ -420,7 +435,7 @@ public class FormsController(
     public async Task<ActionResult<Form>> UploadIntroBackground(
         string id, IFormFile file, CancellationToken cancellationToken)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
         if (file is null) return Problem("No llego ningun archivo.", statusCode: StatusCodes.Status400BadRequest);
 
@@ -434,19 +449,19 @@ public class FormsController(
         images.Delete(store.SetIntroBackground(id, result.PublicPath));
         Notify(form, NotificationType.FormUpdated);
 
-        return Ok(store.GetForm(id));
+        return Ok(access.WithAccess(store.GetForm(id)!));
     }
 
     [HttpDelete("{id}/intro-background")]
     public ActionResult<Form> RemoveIntroBackground(string id)
     {
-        var form = Accessible(id);
+        var form = Editable(id);
         if (form is null) return FormNotFound(id);
 
         images.Delete(store.SetIntroBackground(id, string.Empty));
         Notify(form, NotificationType.FormUpdated);
 
-        return Ok(store.GetForm(id));
+        return Ok(access.WithAccess(store.GetForm(id)!));
     }
 
     // --- Ayudantes ---

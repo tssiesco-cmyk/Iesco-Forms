@@ -326,6 +326,8 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         db.IntroFields.IgnoreQueryFilters().Where(i => formIds.Contains(i.FormId)).ExecuteDelete();
 
         db.Notifications.Where(n => formIds.Contains(n.FormId)).ExecuteDelete();
+        db.FormShares.Where(sh => formIds.Contains(sh.FormId)).ExecuteDelete();
+        db.FormLinks.Where(l => formIds.Contains(l.FormId)).ExecuteDelete();
         db.Forms.Where(f => formIds.Contains(f.Id)).ExecuteDelete();
 
         tx.Commit();
@@ -788,6 +790,7 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         BackgroundOverlay = fila.BackgroundOverlay,
         BackgroundPerQuestion = fila.BackgroundPerQuestion,
         IntroBackgroundImage = fila.IntroBackgroundImage,
+        IsPublic = fila.IsPublic,
         TrashedAt = fila.TrashedAt,
         IntroFields = [.. fila.IntroFields.OrderBy(i => i.Position).Select(ToModel)],
         Questions = [.. fila.Questions.OrderBy(q => q.Position).Select(ToModel)],

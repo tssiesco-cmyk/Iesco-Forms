@@ -9,13 +9,22 @@ namespace IescoForms.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/forms/{formId}/responses")]
-public class ResponsesController(IFormStore store, INotificationStore notifications) : ControllerBase
+public class ResponsesController(
+    IFormStore store,
+    INotificationStore notifications,
+    IFormLinkStore links,
+    FormAccess access) : ControllerBase
 {
-    /// <summary>Respuestas de un formulario, de la mas reciente a la mas antigua.</summary>
+    /// <summary>
+    /// Respuestas de un formulario, de la mas reciente a la mas antigua. Las ve
+    /// quien tenga cualquier acceso, incluido el permiso de solo ver. Sin acceso
+    /// se responde 404, igual que si no existiera.
+    /// </summary>
     [HttpGet]
     public ActionResult<IReadOnlyList<FormResponse>> GetByForm(string formId)
     {
-        if (store.GetForm(formId) is null)
+        var form = store.GetForm(formId);
+        if (form is null || access.LevelFor(form) == FormAccessLevel.None)
         {
             return Problem($"No existe el formulario '{formId}'.", statusCode: StatusCodes.Status404NotFound);
         }
@@ -24,18 +33,34 @@ public class ResponsesController(IFormStore store, INotificationStore notificati
     }
 
     /// <summary>
-    /// Registra una respuesta. Este es el unico endpoint de escritura abierto:
-    /// lo llama quien llena el formulario, no quien lo administra. Leer las
-    /// respuestas si exige sesion.
+    /// Registra una respuesta. Es el unico endpoint de escritura abierto: lo
+    /// llama quien llena el formulario, no quien lo administra.
+    ///
+    /// Con sesion basta con que este publicado. Sin sesion hace falta un enlace
+    /// vigente de ese formulario (?link=token): asi, cuando el enlace vence,
+    /// deja de servir tambien para enviar, no solo para abrir.
     /// </summary>
     [AllowAnonymous]
     [HttpPost]
-    public ActionResult<FormResponse> Submit(string formId, [FromBody] SubmitResponseRequest request)
+    public ActionResult<FormResponse> Submit(string formId, [FromBody] SubmitResponseRequest request, [FromQuery] string? link)
     {
         var form = store.GetForm(formId);
-        if (form is null)
+        if (form is null || form.TrashedAt is not null)
         {
             return Problem($"No existe el formulario '{formId}'.", statusCode: StatusCodes.Status404NotFound);
+        }
+
+        if (User.Identity?.IsAuthenticated != true)
+        {
+            var found = string.IsNullOrWhiteSpace(link) ? null : links.FindByToken(link);
+
+            if (found is null || found.Value.FormId != formId)
+                return Problem("Para responder sin iniciar sesion hace falta un enlace valido.",
+                    statusCode: StatusCodes.Status401Unauthorized);
+
+            if (found.Value.Link.ExpiresAt <= DateTimeOffset.UtcNow)
+                return Problem("Este enlace ya vencio y no acepta mas respuestas.",
+                    statusCode: StatusCodes.Status410Gone);
         }
 
         if (form.Status != FormStatus.Active)

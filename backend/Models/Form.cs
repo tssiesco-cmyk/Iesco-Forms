@@ -10,6 +10,32 @@ public static class FormStatus
     public const string Active = "Activo";
 }
 
+/// <summary>Permisos al compartir un formulario con otro usuario.</summary>
+public static class SharePermission
+{
+    /// <summary>Puede cambiar el formulario y publicarlo.</summary>
+    public const string Edit = "edit";
+
+    /// <summary>Solo vista previa y resultados.</summary>
+    public const string View = "view";
+
+    public static bool IsValid(string? value) => value is Edit or View;
+}
+
+/// <summary>
+/// Lo que el usuario conectado puede hacer con un formulario. Va de menos a mas:
+/// cada nivel incluye lo que permite el anterior.
+/// </summary>
+public enum FormAccessLevel
+{
+    None = 0,
+    View = 1,
+    Edit = 2,
+
+    /// <summary>Dueno, formulario sin dueno o administrador: ademas puede compartir y borrar.</summary>
+    Owner = 3,
+}
+
 /// <summary>Tipos de pregunta soportados por el editor.</summary>
 public static class QuestionType
 {
@@ -84,6 +110,13 @@ public class Form
     /// </summary>
     public string IntroBackgroundImage { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Publico: todos los usuarios lo ven en Compartidos &gt; Publicos y pueden
+    /// responderlo. Solo se lista mientras esta publicado. No da acceso al
+    /// editor ni a los resultados.
+    /// </summary>
+    public bool IsPublic { get; set; }
+
     /// <summary>Datos que se piden antes de empezar a responder. Puede ir vacio.</summary>
     public List<IntroField> IntroFields { get; set; } = [];
 
@@ -98,7 +131,26 @@ public class Form
     /// respuestas de cada formulario por separado.
     /// </summary>
     public int ResponseCount { get; set; }
+
+    // --- Calculados para quien pregunta; no se guardan ---
+
+    /// <summary>owner, edit o view: lo que puede hacer el usuario conectado.</summary>
+    public string? Access { get; set; }
+
+    /// <summary>edit o view si se lo compartieron a este usuario; null si no.</summary>
+    public string? SharedPermission { get; set; }
+
+    /// <summary>Nombre del dueno, para mostrar "Compartido por".</summary>
+    public string? OwnerName { get; set; }
 }
+
+/// <summary>Una persona con la que se compartio un formulario.</summary>
+public record FormShare(
+    string UserId,
+    string Email,
+    string DisplayName,
+    string Permission,
+    DateTimeOffset SharedAt);
 
 public class Question
 {
@@ -138,3 +190,13 @@ public class IntroField
     public bool Required { get; set; }
     public bool Enabled { get; set; } = true;
 }
+
+/// <summary>
+/// Enlace para responder sin iniciar sesion. Vence en ExpiresAt: a partir de
+/// ahi ese enlace ya no abre el formulario, aunque el formulario siga abierto.
+/// </summary>
+public record FormLink(
+    string Id,
+    string Token,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset CreatedAt);

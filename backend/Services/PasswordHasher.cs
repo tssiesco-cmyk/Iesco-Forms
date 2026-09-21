@@ -16,6 +16,9 @@ public static class PasswordHasher
     private const int SaltSize = 16;
     private const int HashSize = 32;
 
+    /// <summary>Largo minimo que se exige al crear o cambiar una contrasena.</summary>
+    public const int MinLength = 8;
+
     /// <summary>Devuelve "iteraciones.sal.hash", todo en base64.</summary>
     public static string Hash(string password)
     {

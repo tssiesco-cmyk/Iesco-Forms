@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using IescoForms.Api.Services;
 
 namespace IescoForms.Api.Contracts;
 
@@ -54,3 +55,60 @@ public record LoginRequest(
     string Password,
 
     bool RememberMe = false);
+
+public record ForgotPasswordRequest(
+    [Required(ErrorMessage = "El correo es obligatorio.")]
+    [EmailAddress(ErrorMessage = "El correo no tiene un formato valido.")]
+    [MaxLength(256)]
+    string Email);
+
+public record SetPublicRequest(bool IsPublic);
+
+/// <summary>Cuando vence el enlace. Sirve para crearlo y para cambiarle la hora.</summary>
+public record FormLinkExpiryRequest(
+    [Required(ErrorMessage = "La fecha de vencimiento es obligatoria.")]
+    DateTimeOffset? ExpiresAt);
+
+// --- Usuarios (solo administradores) ---
+
+public record CreateUserRequest(
+    [Required(ErrorMessage = "El correo es obligatorio.")]
+    [EmailAddress(ErrorMessage = "El correo no tiene un formato valido.")]
+    [MaxLength(256)]
+    string Email,
+
+    [Required(ErrorMessage = "El nombre es obligatorio.")]
+    [MaxLength(150)]
+    string DisplayName,
+
+    [Required(ErrorMessage = "El rol es obligatorio.")]
+    string Role,
+
+    [Required(ErrorMessage = "La contrasena es obligatoria.")]
+    [MinLength(PasswordHasher.MinLength, ErrorMessage = "La contrasena debe tener al menos 8 caracteres.")]
+    string Password);
+
+public record UpdateUserRequest(
+    [MaxLength(150)] string? DisplayName,
+    string? Role,
+    bool? IsActive);
+
+public record ResetPasswordRequest(
+    [Required(ErrorMessage = "La contrasena es obligatoria.")]
+    [MinLength(PasswordHasher.MinLength, ErrorMessage = "La contrasena debe tener al menos 8 caracteres.")]
+    string NewPassword);
+
+// --- Mi cuenta ---
+
+public record UpdateAccountRequest(
+    [Required(ErrorMessage = "El nombre es obligatorio.")]
+    [MaxLength(150)]
+    string DisplayName);
+
+public record ChangePasswordRequest(
+    [Required(ErrorMessage = "Escribe tu contrasena actual.")]
+    string CurrentPassword,
+
+    [Required(ErrorMessage = "La contrasena nueva es obligatoria.")]
+    [MinLength(PasswordHasher.MinLength, ErrorMessage = "La contrasena nueva debe tener al menos 8 caracteres.")]
+    string NewPassword);

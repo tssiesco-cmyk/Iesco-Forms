@@ -17,6 +17,9 @@ public static class NotificationType
     public const string FormTrashed = "form_trashed";
     public const string FormRestored = "form_restored";
 
+    /// <summary>Alguien compartio un formulario contigo.</summary>
+    public const string FormShared = "form_shared";
+
     /// <summary>
     /// Tipos cuyo texto en el panel incluye cuantas veces ocurrio. En los demas
     /// el numero no aporta: "publicado" ya lo dice todo.
