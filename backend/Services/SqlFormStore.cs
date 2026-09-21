@@ -125,6 +125,14 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
             Status = FormStatus.Draft,
             OwnerId = string.IsNullOrWhiteSpace(ownerId) ? null : ownerId,
             CreatedAt = DateTimeOffset.UtcNow,
+
+            // Fondo y portada nacen con los de la plantilla; desde aqui son del
+            // formulario y se editan sin afectar a la plantilla ni a los demas.
+            BackgroundImage = plantilla.BackgroundImage,
+            CoverEnabled = plantilla.CoverEnabled,
+            CoverTitle = plantilla.CoverTitle,
+            CoverSubtitle = plantilla.CoverSubtitle,
+            CoverWelcome = plantilla.CoverWelcome,
         };
 
         var posicion = 0;
@@ -192,6 +200,22 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         db.SaveChanges();
 
         return HuerfanaSiCambio(anterior, imagePath);
+    }
+
+    public Form? SetCover(string formId, bool? enabled, string? title, string? subtitle, string? welcome)
+    {
+        var fila = db.Forms.FirstOrDefault(f => f.Id == formId);
+        if (fila is null) return null;
+
+        // Null es "no lo toques": el panel manda solo el campo que cambio.
+        if (enabled.HasValue) fila.CoverEnabled = enabled.Value;
+        if (title is not null) fila.CoverTitle = title;
+        if (subtitle is not null) fila.CoverSubtitle = subtitle;
+        if (welcome is not null) fila.CoverWelcome = welcome;
+
+        db.SaveChanges();
+
+        return GetForm(formId);
     }
 
     public string? SetQuestionBackground(string formId, string questionId, string? imagePath)
@@ -767,6 +791,10 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         BackgroundOverlay = fila.BackgroundOverlay,
         BackgroundPerQuestion = fila.BackgroundPerQuestion,
         IntroBackgroundImage = fila.IntroBackgroundImage,
+        CoverEnabled = fila.CoverEnabled,
+        CoverTitle = fila.CoverTitle,
+        CoverSubtitle = fila.CoverSubtitle,
+        CoverWelcome = fila.CoverWelcome,
         IsPublic = fila.IsPublic,
         TrashedAt = fila.TrashedAt,
         IntroFields = [.. fila.IntroFields.OrderBy(i => i.Position).Select(ToModel)],

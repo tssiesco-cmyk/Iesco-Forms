@@ -52,6 +52,12 @@ public class FormRow
     public bool BackgroundPerQuestion { get; set; }
     public string IntroBackgroundImage { get; set; } = string.Empty;
 
+    /// <summary>Portada: primera pantalla antes de las preguntas.</summary>
+    public bool CoverEnabled { get; set; }
+    public string CoverTitle { get; set; } = string.Empty;
+    public string CoverSubtitle { get; set; } = string.Empty;
+    public string CoverWelcome { get; set; } = string.Empty;
+
     /// <summary>Visible para todos en Compartidos &gt; Publicos.</summary>
     public bool IsPublic { get; set; }
 

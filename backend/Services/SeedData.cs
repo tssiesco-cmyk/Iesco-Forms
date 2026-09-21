@@ -188,6 +188,16 @@ public static class SeedData
             Name = "Encuesta de satisfacción",
             Description = "Mide la satisfacción de tus clientes con el servicio, el equipo asignado y el cumplimiento de plazos.",
             Category = "Feedback",
+            BackgroundImage = FondoSatisfaccion,
+            CoverEnabled = true,
+            CoverTitle = "Encuesta de satisfacción del cliente IESCO Group",
+            CoverSubtitle = "¡Nos encantaría conocer su opinión sobre nuestra empresa!",
+            // Datos de ejemplo del servicio: se editan en cada formulario nuevo.
+            CoverWelcome =
+                "Empresa: IMI Del Perú S.A.C.\n" +
+                "Proyecto: P251140\n" +
+                "Servicio:\n" +
+                "Capacitación y certificación en operación segura de grúa articulada",
             Questions =
             [
                 Choice("¿Qué tan satisfecho está con el servicio?", true, Escala0A10),
@@ -207,6 +217,13 @@ public static class SeedData
             Name = "Encuesta NPS",
             Description = "Net Promoter Score: mide la lealtad de tus clientes y las razones detras de su puntuacion.",
             Category = "Feedback",
+            BackgroundImage = FondoNps,
+            CoverEnabled = true,
+            CoverTitle = "¿Nos recomendaría a un colega del sector?",
+            CoverSubtitle = "Una sola pregunta define todo lo demás",
+            CoverWelcome =
+                "Son cinco preguntas y toma menos de dos minutos.\n" +
+                "Su respuesta nos dice qué estamos haciendo bien y qué tenemos que corregir.",
             Questions =
             [
                 Choice("Del 0 al 10, que tan probable es que nos recomiendes a un amigo o colega?", true, "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"),
@@ -227,6 +244,15 @@ public static class SeedData
             Name = "Feedback de evento",
             Description = "Recopila opiniones despues de un evento, conferencia o capacitacion.",
             Category = "Feedback",
+            BackgroundImage = FondoEventoFeedback,
+            CoverEnabled = true,
+            CoverTitle = "¿Qué le pareció la jornada?",
+            CoverSubtitle = "Su opinión define la próxima capacitación",
+            CoverWelcome =
+                "Evento:\n" +
+                "Fecha:\n" +
+                "Expositor:\n\n" +
+                "Cuéntenos qué se llevó y qué le faltó. Leemos todas las respuestas.",
             Questions =
             [
                 Choice("En que calidad participaste?", true, "Asistente", "Ponente", "Patrocinador", "Organizador", "Prensa"),
@@ -250,6 +276,13 @@ public static class SeedData
             Id = "tpl-contact",
             Name = "Formulario de contacto",
             Description = "Recibe consultas con los datos necesarios para darles seguimiento.",
+            BackgroundImage = FondoContacto,
+            CoverEnabled = true,
+            CoverTitle = "Hablemos de su proyecto",
+            CoverSubtitle = "Cuéntenos en qué podemos ayudarle",
+            CoverWelcome =
+                "Déjenos sus datos y el motivo de su consulta.\n" +
+                "Un asesor de la línea de servicio que corresponda le responderá dentro de las 24 horas hábiles.",
             Category = "Contacto",
             Questions =
             [
@@ -274,6 +307,15 @@ public static class SeedData
             Id = "tpl-registration",
             Name = "Registro de evento",
             Description = "Registra asistentes con sus datos, preferencias y requerimientos.",
+            BackgroundImage = FondoRegistro,
+            CoverEnabled = true,
+            CoverTitle = "Reserve su lugar",
+            CoverSubtitle = "Inscripción a la próxima jornada IESCO Group",
+            CoverWelcome =
+                "Evento:\n" +
+                "Fecha:\n" +
+                "Lugar:\n\n" +
+                "Complete sus datos para confirmar la inscripción. Le enviaremos la confirmación por correo.",
             Category = "Contacto",
             Questions =
             [
@@ -300,6 +342,15 @@ public static class SeedData
             Id = "tpl-job",
             Name = "Solicitud de empleo",
             Description = "Recibe postulaciones completas: datos, formacion, experiencia y disponibilidad.",
+            BackgroundImage = FondoEmpleo,
+            CoverEnabled = true,
+            CoverTitle = "Súmese al equipo de IESCO Group",
+            CoverSubtitle = "Su experiencia en campo tiene un lugar aquí",
+            CoverWelcome =
+                "Puesto:\n" +
+                "Área:\n" +
+                "Ubicación:\n\n" +
+                "Complete sus datos, formación y experiencia. Revisamos cada postulación y le escribimos si su perfil avanza.",
             Category = "Contacto",
             Questions =
             [
@@ -330,6 +381,15 @@ public static class SeedData
             Id = "tpl-quiz",
             Name = "Quiz de conocimiento",
             Description = "Evalua lo aprendido en una induccion de seguridad y politicas internas.",
+            BackgroundImage = FondoQuiz,
+            CoverEnabled = true,
+            CoverTitle = "Evaluación de inducción",
+            CoverSubtitle = "Seguridad y políticas internas",
+            CoverWelcome =
+                "Curso:\n" +
+                "Fecha:\n" +
+                "Participante:\n\n" +
+                "Responda según lo visto en la inducción. Hay que contestar todas las preguntas para terminar.",
             Category = "Evaluacion",
             Questions =
             [
@@ -354,6 +414,15 @@ public static class SeedData
             Id = "tpl-performance",
             Name = "Evaluacion de desempeno",
             Description = "Evalua competencias, resultados y plan de desarrollo de los colaboradores.",
+            BackgroundImage = FondoDesempeno,
+            CoverEnabled = true,
+            CoverTitle = "Evaluación de desempeño",
+            CoverSubtitle = "Competencias, resultados y plan de desarrollo",
+            CoverWelcome =
+                "Colaborador:\n" +
+                "Área:\n" +
+                "Periodo evaluado:\n\n" +
+                "Evalúe cada aspecto con ejemplos concretos en mente. Los resultados se conversan en la reunión de retroalimentación.",
             Category = "Evaluacion",
             Questions =
             [
@@ -386,6 +455,13 @@ public static class SeedData
             Id = "tpl-market",
             Name = "Investigacion de mercado",
             Description = "Conoce el perfil, habitos, necesidades y disposicion de compra de tu mercado.",
+            BackgroundImage = FondoMercado,
+            CoverEnabled = true,
+            CoverTitle = "Queremos entender mejor su operación",
+            CoverSubtitle = "Estudio de mercado IESCO Group",
+            CoverWelcome =
+                "Sus respuestas nos ayudan a diseñar servicios que resuelvan problemas reales del sector.\n" +
+                "La información es confidencial y se usa solo con fines estadísticos.",
             Category = "Evaluacion",
             Questions =
             [
@@ -413,6 +489,22 @@ public static class SeedData
 
     // Escalas repetidas. Van en un solo sitio para que todas las plantillas
     // usen exactamente las mismas palabras y los resultados se puedan comparar.
+    // Fondos de las portadas. Viven en frontend/public, asi que el frontend los
+    // sirve en esa ruta tal cual, en desarrollo y compilado. No pasan por
+    // uploads/backgrounds, de modo que cambiar el fondo de un formulario nunca
+    // borra el archivo que comparten todos los demas.
+    //
+    // Una imagen por plantilla, sin repetir, elegidas por lo que muestran.
+    private const string FondoSatisfaccion = "/AdobeStock_518323798.jpeg";
+    private const string FondoNps = "/AdobeStock_2007793277.jpeg";          // bomba al atardecer
+    private const string FondoEventoFeedback = "/AdobeStock_2080966257.jpeg"; // emergencia atendida
+    private const string FondoContacto = "/AdobeStock_202041790.jpeg";      // refineria de noche
+    private const string FondoRegistro = "/AdobeStock_2023732488.jpeg";     // antorcha, vista aerea
+    private const string FondoEmpleo = "/AdobeStock_1195486359.jpeg";       // bomba a pleno dia
+    private const string FondoQuiz = "/AdobeStock_2164906378.jpeg";         // incendio de tanques
+    private const string FondoDesempeno = "/AdobeStock_137417730.jpeg";     // camion minero
+    private const string FondoMercado = "/AdobeStock_377799248.jpeg";       // puerto con datos
+
     // Escala 0-10 de la encuesta de satisfaccion: once opciones, estilo NPS.
     private static readonly string[] Escala0A10 = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
 

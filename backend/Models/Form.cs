@@ -111,6 +111,22 @@ public class Form
     public string IntroBackgroundImage { get; set; } = string.Empty;
 
     /// <summary>
+    /// Portada: la primera pantalla que ve quien responde, antes de las
+    /// preguntas. Apagada, se entra directo (o a los datos del respondedor, si
+    /// los hay). El fondo es el mismo IntroBackgroundImage, que ya cubre esa
+    /// pantalla.
+    /// </summary>
+    public bool CoverEnabled { get; set; }
+
+    /// <summary>Vacio: se usa el titulo del formulario.</summary>
+    public string CoverTitle { get; set; } = string.Empty;
+
+    public string CoverSubtitle { get; set; } = string.Empty;
+
+    /// <summary>Vacio: se usa la descripcion del formulario.</summary>
+    public string CoverWelcome { get; set; } = string.Empty;
+
+    /// <summary>
     /// Publico: todos los usuarios lo ven en Compartidos &gt; Publicos y pueden
     /// responderlo. Solo se lista mientras esta publicado. No da acceso al
     /// editor ni a los resultados.

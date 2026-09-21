@@ -87,6 +87,11 @@ public class InMemoryFormStore : IFormStore
                 Status = FormStatus.Draft,
                 OwnerId = ownerId,
                 CreatedAt = Today(),
+                BackgroundImage = template.BackgroundImage,
+                CoverEnabled = template.CoverEnabled,
+                CoverTitle = template.CoverTitle,
+                CoverSubtitle = template.CoverSubtitle,
+                CoverWelcome = template.CoverWelcome,
                 IntroFields = [],
                 Questions = [.. template.Questions.Select(q => new Question
                 {
@@ -114,6 +119,23 @@ public class InMemoryFormStore : IFormStore
             if (title is not null) form.Title = title;
             if (description is not null) form.Description = description;
             if (status is not null) form.Status = status;
+
+            return form;
+        }
+    }
+
+    public Form? SetCover(string formId, bool? enabled, string? title, string? subtitle, string? welcome)
+    {
+        lock (_gate)
+        {
+            var form = _forms.FirstOrDefault(f => f.Id == formId);
+            if (form is null) return null;
+
+            // Null es "no lo toques": el panel manda solo el campo que cambio.
+            if (enabled.HasValue) form.CoverEnabled = enabled.Value;
+            if (title is not null) form.CoverTitle = title;
+            if (subtitle is not null) form.CoverSubtitle = subtitle;
+            if (welcome is not null) form.CoverWelcome = welcome;
 
             return form;
         }

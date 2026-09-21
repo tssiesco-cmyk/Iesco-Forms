@@ -185,6 +185,7 @@ export const formsApi = {
   removeIntroBackground: (formId) => del(`/forms/${formId}/intro-background`),
   removeBackground: (formId) => del(`/forms/${formId}/background`),
   updateBackground: (formId, changes) => patch(`/forms/${formId}/background`, changes),
+  updateCover: (formId, changes) => patch(`/forms/${formId}/cover`, changes),
 
   addIntroField: (formId, type) => post(`/forms/${formId}/intro-fields`, { type }),
   updateIntroField: (formId, fieldId, changes) =>

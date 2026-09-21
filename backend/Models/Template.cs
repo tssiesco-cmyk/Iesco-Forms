@@ -13,6 +13,21 @@ public class Template
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Fondo con el que nace el formulario. Es una ruta publica servida por el
+    /// frontend (carpeta public), no una imagen subida: no vive en
+    /// uploads/backgrounds y por tanto nadie la borra al cambiar un fondo.
+    /// Vacio: el formulario nace sin fondo.
+    /// </summary>
+    public string BackgroundImage { get; set; } = string.Empty;
+
+    /// <summary>Portada con la que nace el formulario. Ver Form.CoverEnabled.</summary>
+    public bool CoverEnabled { get; set; }
+    public string CoverTitle { get; set; } = string.Empty;
+    public string CoverSubtitle { get; set; } = string.Empty;
+    public string CoverWelcome { get; set; } = string.Empty;
+
     public List<TemplateQuestion> Questions { get; set; } = [];
 }
 

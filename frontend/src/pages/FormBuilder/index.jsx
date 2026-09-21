@@ -6,7 +6,7 @@ import {
   FiCircle, FiCheckSquare, FiChevronUp, FiChevronDown,
   FiEye, FiX, FiBarChart2, FiUser, FiToggleLeft, FiToggleRight, FiMail, FiPhone,
   FiSend, FiRotateCcw, FiCheck, FiAlertCircle, FiImage, FiUpload,
-  FiCopy, FiChevronsLeft, FiChevronsRight, FiShare2
+  FiCopy, FiChevronsLeft, FiChevronsRight, FiShare2, FiLayout
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import Button from "../../components/atoms/Button";
@@ -617,6 +617,46 @@ const IntroSection = styled.div`
   border-bottom: 1px solid ${({ theme }) => theme.colors.border};
 `;
 
+const CoverSection = styled(IntroSection)``;
+
+/* Los campos de la portada se apagan con la portada: siguen a la vista para no
+   perder lo escrito, pero se ven claramente inactivos. */
+const CoverBody = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: ${({ $on }) => ($on ? 1 : 0.45)};
+  pointer-events: ${({ $on }) => ($on ? "auto" : "none")};
+`;
+
+const CoverInput = styled.input`
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.radii.sm};
+  background: ${({ theme }) => theme.colors.surface};
+  font-size: ${({ theme }) => theme.fontSizes.md};
+  color: ${({ theme }) => theme.colors.text};
+  outline: none;
+
+  &:focus { border-color: ${({ theme }) => theme.colors.primary}; }
+  &::placeholder { color: ${({ theme }) => theme.colors.textMuted}; }
+`;
+
+const CoverTextarea = styled(CoverInput).attrs({ as: "textarea" })`
+  min-height: 62px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.45;
+`;
+
+const CoverHint = styled.p`
+  margin: 0;
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.textMuted};
+  line-height: 1.45;
+`;
+
 const IntroSectionTitle = styled.div`
   display: flex;
   align-items: center;
@@ -833,7 +873,7 @@ function FormBuilder() {
     getForm, status, error, reload, saveState, flushPendingWrites,
     uploadBackground, removeBackground, setBackgroundOverlay,
     setBackgroundPerQuestion, uploadQuestionBackground, removeQuestionBackground,
-    uploadIntroBackground, removeIntroBackground,
+    uploadIntroBackground, removeIntroBackground, setCover,
     updateForm, addQuestion, updateQuestion,
     deleteQuestion, duplicateQuestion, reorderQuestions, addOption, updateOption, deleteOption,
     updateIntroField, addIntroField, removeIntroField
@@ -1108,6 +1148,100 @@ function FormBuilder() {
           </BackgroundHint>
         </BackgroundSection>
 
+        <CoverSection>
+          <IntroSectionTitle>
+            <FiLayout size={12} /> Portada
+          </IntroSectionTitle>
+
+          <OverlayToggle>
+            <input
+              type="checkbox"
+              checked={Boolean(form.coverEnabled)}
+              onChange={(e) => setCover(id, { enabled: e.target.checked })}
+            />
+            Mostrar portada antes de las preguntas
+          </OverlayToggle>
+
+          <CoverBody $on={Boolean(form.coverEnabled)}>
+            <CoverInput
+              value={form.coverTitle || ""}
+              onChange={(e) => setCover(id, { title: e.target.value })}
+              placeholder={form.title || "Titulo"}
+              disabled={!form.coverEnabled}
+            />
+            <CoverInput
+              value={form.coverSubtitle || ""}
+              onChange={(e) => setCover(id, { subtitle: e.target.value })}
+              placeholder="Subtitulo (opcional)"
+              disabled={!form.coverEnabled}
+            />
+            <CoverTextarea
+              value={form.coverWelcome || ""}
+              onChange={(e) => setCover(id, { welcome: e.target.value })}
+              placeholder={form.description || "Texto de bienvenida"}
+              disabled={!form.coverEnabled}
+            />
+
+            {/* El fondo de la portada es el de la pantalla de inicio, que ya
+                existia. Igual que las imagenes por pregunta, solo se puede
+                elegir con "Imagen distinta por pregunta" activado. */}
+            {form.backgroundPerQuestion ? (
+              <QuestionBackground>
+                <QuestionBackgroundPreview
+                  $image={form.introBackgroundImage || form.backgroundImage}
+                >
+                  {!form.introBackgroundImage && !form.backgroundImage && (
+                    <><FiImage size={13} /> Sin imagen</>
+                  )}
+                </QuestionBackgroundPreview>
+
+                <div>
+                  <QuestionBackgroundLabel>
+                    {form.introBackgroundImage
+                      ? "Imagen de la portada"
+                      : "Usando la imagen del formulario"}
+                  </QuestionBackgroundLabel>
+
+                  <input
+                    ref={introFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handlePickIntroFile}
+                    hidden
+                  />
+
+                  <BackgroundActions>
+                    <BackgroundButton
+                      onClick={() => introFileInputRef.current?.click()}
+                      disabled={uploadingIntro}
+                    >
+                      {uploadingIntro ? <Spinner $size={12} /> : <FiUpload size={12} />}
+                      {uploadingIntro
+                        ? "Subiendo..."
+                        : form.introBackgroundImage ? "Cambiar" : "Subir imagen"}
+                    </BackgroundButton>
+
+                    {form.introBackgroundImage && (
+                      <BackgroundButton
+                        $danger
+                        onClick={() => removeIntroBackground(id)}
+                        disabled={uploadingIntro}
+                      >
+                        <FiX size={12} /> Quitar
+                      </BackgroundButton>
+                    )}
+                  </BackgroundActions>
+                </div>
+              </QuestionBackground>
+            ) : (
+              <CoverHint>
+                Para darle una imagen propia, activa "Imagen distinta por pregunta"
+                en Fondo de la encuesta. Mientras tanto usa la del formulario.
+              </CoverHint>
+            )}
+          </CoverBody>
+        </CoverSection>
+
         <IntroSection>
           <IntroSectionTitle>
             <FiUser size={12} /> Datos del usuario
@@ -1139,56 +1273,6 @@ function FormBuilder() {
               </IntroRemoveBtn>
             </IntroFieldRow>
           ))}
-          {form.backgroundPerQuestion && (
-            <QuestionBackground>
-              <QuestionBackgroundPreview
-                $image={form.introBackgroundImage || form.backgroundImage}
-              >
-                {!form.introBackgroundImage && !form.backgroundImage && (
-                  <><FiImage size={13} /> Sin imagen</>
-                )}
-              </QuestionBackgroundPreview>
-
-              <div>
-                <QuestionBackgroundLabel>
-                  {form.introBackgroundImage
-                    ? "Imagen de esta pantalla"
-                    : "Usando la imagen del formulario"}
-                </QuestionBackgroundLabel>
-
-                <input
-                  ref={introFileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={handlePickIntroFile}
-                  hidden
-                />
-
-                <BackgroundActions>
-                  <BackgroundButton
-                    onClick={() => introFileInputRef.current?.click()}
-                    disabled={uploadingIntro}
-                  >
-                    {uploadingIntro ? <Spinner $size={12} /> : <FiUpload size={12} />}
-                    {uploadingIntro
-                      ? "Subiendo..."
-                      : form.introBackgroundImage ? "Cambiar" : "Subir imagen"}
-                  </BackgroundButton>
-
-                  {form.introBackgroundImage && (
-                    <BackgroundButton
-                      $danger
-                      onClick={() => removeIntroBackground(id)}
-                      disabled={uploadingIntro}
-                    >
-                      <FiX size={12} /> Quitar
-                    </BackgroundButton>
-                  )}
-                </BackgroundActions>
-              </div>
-            </QuestionBackground>
-          )}
-
           <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
             <IntroAddBtn onClick={() => addIntroField(id, "name")}>
               <FiUser size={12} /> Nombre

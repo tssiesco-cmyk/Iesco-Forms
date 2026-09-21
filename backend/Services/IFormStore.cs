@@ -24,6 +24,9 @@ public interface IFormStore
     /// </summary>
     string? SetBackground(string formId, string? imagePath, bool? overlay, bool? perQuestion);
 
+    /// <summary>Portada del formulario. Los nulos se dejan como estan.</summary>
+    Form? SetCover(string formId, bool? enabled, string? title, string? subtitle, string? welcome);
+
     /// <summary>
     /// Cambia la imagen de una pregunta. Devuelve la anterior para poder borrar
     /// su archivo, igual que SetBackground.

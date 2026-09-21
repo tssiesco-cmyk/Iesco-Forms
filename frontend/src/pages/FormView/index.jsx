@@ -394,11 +394,22 @@ const IntroTitle = styled.h1`
   letter-spacing: -0.3px;
 `;
 
+/* Va pegado al titulo, no al texto de bienvenida: son una unidad, como la
+   bajada de una portada. */
+const IntroSubtitle = styled.p`
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--fv-secondary);
+  margin: -4px 0 12px;
+  line-height: 1.35;
+`;
+
 const IntroDesc = styled.p`
   font-size: 17px;
   color: var(--fv-secondary);
   margin: 0 0 36px;
   line-height: 1.5;
+  white-space: pre-line;
 `;
 
 const IntroForm = styled.div`
@@ -580,7 +591,10 @@ function FormView() {
   const backgroundProps = backgroundPropsFor(formBackground);
 
   const introFields = (form?.introFields || []).filter((f) => f.enabled);
-  const hasIntro = introFields.length > 0;
+  // La primera pantalla sale si se pidio portada o si hay datos que rellenar.
+  // Son cosas distintas: se puede querer una bienvenida sin pedir nada.
+  const hasCover = Boolean(form?.coverEnabled);
+  const hasIntro = hasCover || introFields.length > 0;
   const hasQuestions = form?.questions?.length > 0;
   // Ojo: el paso NO se puede fijar con useState(hasIntro ? ...), porque en el
   // primer render el formulario aun no ha llegado de la API y hasIntro seria
@@ -791,9 +805,18 @@ function FormView() {
 
         <QuestionContainer $direction="forward">
           <IntroCard>
-            <IntroTitle>{form.title}</IntroTitle>
+            {/* Los textos de la portada mandan; vacios, se cae al titulo y la
+                descripcion del formulario, que es lo que se veia antes. */}
+            <IntroTitle>{form.coverTitle?.trim() || form.title}</IntroTitle>
+
+            {hasCover && form.coverSubtitle?.trim() && (
+              <IntroSubtitle>{form.coverSubtitle}</IntroSubtitle>
+            )}
+
             <IntroDesc>
-              {form.description || "Completa este formulario para enviar tus respuestas."}
+              {form.coverWelcome?.trim()
+                || form.description
+                || "Completa este formulario para enviar tus respuestas."}
             </IntroDesc>
 
             {introFields.length > 0 && (

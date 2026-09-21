@@ -96,6 +96,13 @@ CREATE TABLE dbo.Forms
     BackgroundPerQuestion BIT            NOT NULL CONSTRAINT DF_Forms_BackgroundPerQuestion DEFAULT 0,
     IntroBackgroundImage  NVARCHAR(400)  NOT NULL CONSTRAINT DF_Forms_IntroBackgroundImage  DEFAULT '',
 
+    -- Portada: primera pantalla, antes de las preguntas. Los textos vacios usan
+    -- el titulo y la descripcion del formulario. El fondo es IntroBackgroundImage.
+    CoverEnabled          BIT            NOT NULL CONSTRAINT DF_Forms_CoverEnabled  DEFAULT 0,
+    CoverTitle            NVARCHAR(200)  NOT NULL CONSTRAINT DF_Forms_CoverTitle    DEFAULT '',
+    CoverSubtitle         NVARCHAR(300)  NOT NULL CONSTRAINT DF_Forms_CoverSubtitle DEFAULT '',
+    CoverWelcome          NVARCHAR(1000) NOT NULL CONSTRAINT DF_Forms_CoverWelcome  DEFAULT '',
+
     -- Visible para todos los usuarios en Compartidos > Publicos, para responderlo.
     -- Solo se lista mientras esta publicado.
     IsPublic              BIT            NOT NULL CONSTRAINT DF_Forms_IsPublic DEFAULT 0,

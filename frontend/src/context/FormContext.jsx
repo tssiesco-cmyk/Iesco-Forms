@@ -495,6 +495,37 @@ export function FormProvider({ children }) {
     return true;
   }, [runWrite, replaceForm]);
 
+  /**
+   * Portada: interruptor y textos. Recibe solo lo que cambio ({ enabled },
+   * { title }...), para no pisar los demas campos si hay dos ediciones seguidas.
+   *
+   * El interruptor viaja al momento; los textos esperan a que pares de escribir,
+   * como el titulo del formulario. Cada texto lleva su propia clave: escribir el
+   * subtitulo no debe cancelar el envio del titulo.
+   */
+  const setCover = useCallback((formId, changes) => {
+    patchFormLocally(formId, (form) => ({
+      ...form,
+      ...(changes.enabled !== undefined && { coverEnabled: changes.enabled }),
+      ...(changes.title !== undefined && { coverTitle: changes.title }),
+      ...(changes.subtitle !== undefined && { coverSubtitle: changes.subtitle }),
+      ...(changes.welcome !== undefined && { coverWelcome: changes.welcome }),
+    }));
+
+    const send = () => formsApi.updateCover(formId, changes);
+
+    if (changes.enabled !== undefined) {
+      return runWrite(send, "No se pudo guardar la portada").then((res) => {
+        if (!res.ok) resyncForm(formId);
+        return res.ok;
+      });
+    }
+
+    const campo = Object.keys(changes)[0] ?? "cover";
+    scheduleWrite(`cover:${formId}:${campo}`, send, "No se pudo guardar la portada");
+    return Promise.resolve(true);
+  }, [patchFormLocally, runWrite, resyncForm, scheduleWrite]);
+
   const setBackgroundOverlay = useCallback(async (formId, overlay) => {
     patchFormLocally(formId, (form) => ({ ...form, backgroundOverlay: overlay }));
 
@@ -668,6 +699,7 @@ export function FormProvider({ children }) {
     uploadBackground,
     removeBackground,
     setBackgroundOverlay,
+    setCover,
     setBackgroundPerQuestion,
     uploadQuestionBackground,
     removeQuestionBackground,

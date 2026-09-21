@@ -46,6 +46,9 @@ public record SubmitResponseRequest(
 
 public record UpdateBackgroundRequest(bool? Overlay, bool? PerQuestion);
 
+/// <summary>Portada. Cada campo es opcional: lo que llega null no se toca.</summary>
+public record UpdateCoverRequest(bool? Enabled, string? Title, string? Subtitle, string? Welcome);
+
 public record LoginRequest(
     [Required(ErrorMessage = "El correo es obligatorio.")]
     [EmailAddress(ErrorMessage = "El correo no tiene un formato valido.")]

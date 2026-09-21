@@ -387,6 +387,22 @@ public class FormsController(
     }
 
     /// <summary>
+    /// Portada: la pantalla de bienvenida antes de las preguntas. Se puede
+    /// activar o apagar y darle sus propios textos.
+    /// </summary>
+    [HttpPatch("{id}/cover")]
+    public ActionResult<Form> UpdateCover(string id, [FromBody] UpdateCoverRequest request)
+    {
+        var form = Editable(id);
+        if (form is null) return FormNotFound(id);
+
+        store.SetCover(id, request.Enabled, request.Title, request.Subtitle, request.Welcome);
+        Notify(form, NotificationType.FormUpdated);
+
+        return Ok(access.WithAccess(store.GetForm(id)!));
+    }
+
+    /// <summary>
     /// Sube la imagen de una pregunta concreta. Solo se muestra si el formulario
     /// tiene activado el fondo por pregunta.
     /// </summary>
