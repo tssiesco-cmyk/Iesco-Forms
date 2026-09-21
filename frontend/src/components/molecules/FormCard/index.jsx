@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { FiMoreHorizontal, FiEdit3, FiEye, FiBarChart2, FiTrash2, FiCopy, FiShare2, FiLogOut } from "react-icons/fi";
 import Badge from "../../atoms/Badge";
 
@@ -25,13 +25,25 @@ const Card = styled.div`
 
 const Preview = styled.div`
   height: 120px;
-  background: ${({ theme }) => theme.colors.surfaceAlt};
   border-bottom: 1px solid ${({ theme }) => theme.colors.borderLight};
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: ${({ theme }) => theme.radii.lg} ${({ theme }) => theme.radii.lg} 0 0;
   overflow: hidden;
+
+  /* Con imagen se muestra la portada del formulario; sin ella queda el icono
+     sobre el fondo liso de siempre. */
+  ${({ $image, theme }) => $image
+    ? css`
+        background-color: ${theme.colors.surfaceAlt};
+        background-image: url("${$image}");
+        background-size: cover;
+        background-position: center;
+      `
+    : css`
+        background: ${theme.colors.surfaceAlt};
+      `}
 `;
 
 const PreviewIcon = styled.div`
@@ -129,7 +141,7 @@ const MetaText = styled.span`
 `;
 
 function FormCard({
-  icon, title, date, responses, status, badge,
+  icon, image, title, date, responses, status, badge,
   onClick, onEdit, onPreview, onResults, onDuplicate, onShare, onDelete, onLeave,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -161,8 +173,8 @@ function FormCard({
 
   return (
     <Card onClick={onClick} $menuOpen={menuOpen}>
-      <Preview>
-        <PreviewIcon>{icon}</PreviewIcon>
+      <Preview $image={image}>
+        {!image && <PreviewIcon>{icon}</PreviewIcon>}
       </Preview>
       <CardBody>
         <CardHeader>

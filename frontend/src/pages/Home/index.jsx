@@ -8,6 +8,7 @@ import {
 import { useForms } from "../../context/FormContext";
 import StatCard from "../../components/molecules/StatCard";
 import FormCard from "../../components/molecules/FormCard";
+import { coverImageOf } from "../../services/formCover";
 import CreateCard from "../../components/molecules/CreateCard";
 import SkeletonCard from "../../components/molecules/SkeletonCard";
 import { ErrorState, Skeleton } from "../../components/molecules/StateView";
@@ -181,6 +182,7 @@ function Home() {
                   <FormCard
                     key={form.id}
                     icon={<FiEdit3 size={24} />}
+                    image={coverImageOf(form)}
                     title={form.title}
                     date={form.status === "Borrador" ? "Borrador" : form.createdAt}
                     responses={form.responseCount ?? 0}

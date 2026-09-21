@@ -5,6 +5,7 @@ import { FiEdit3, FiGlobe, FiLock, FiSearch } from "react-icons/fi";
 import PageHeader from "../../components/molecules/PageHeader";
 import SearchToolbar from "../../components/molecules/SearchToolbar";
 import FormCard from "../../components/molecules/FormCard";
+import { coverImageOf } from "../../services/formCover";
 import SkeletonCard from "../../components/molecules/SkeletonCard";
 import { EmptyState, ErrorState } from "../../components/molecules/StateView";
 import Button from "../../components/atoms/Button";
@@ -153,6 +154,7 @@ function Shared() {
                 <FormCard
                   key={f.id}
                   icon={<FiEdit3 size={24} />}
+                  image={coverImageOf(f)}
                   title={f.title}
                   date={`De ${f.ownerName ?? "otro usuario"}`}
                   responses={f.responseCount ?? 0}
@@ -168,6 +170,7 @@ function Shared() {
                 <FormCard
                   key={f.id}
                   icon={<FiGlobe size={24} />}
+                  image={coverImageOf(f)}
                   title={f.title}
                   date={`De ${f.ownerName ?? "otro usuario"}`}
                   badge="Responder"
