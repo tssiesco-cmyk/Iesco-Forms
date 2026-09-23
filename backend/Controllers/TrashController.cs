@@ -16,6 +16,7 @@ namespace IescoForms.Api.Controllers;
 public class TrashController(
     IFormStore store,
     INotificationStore notifications,
+    FormNotifier notifier,
     ImageStorage images,
     FormAccess access) : ControllerBase
 {
@@ -31,7 +32,7 @@ public class TrashController(
         var form = MyTrash().FirstOrDefault(f => f.Id == id);
         if (form is null || !store.RestoreForm(id)) return NotInTrash(id);
 
-        notifications.Record(form.OwnerId, NotificationType.FormRestored, form.Id, form.Title);
+        notifier.Notify(form, NotificationType.FormRestored);
         return NoContent();
     }
 
@@ -39,15 +40,25 @@ public class TrashController(
     [HttpDelete("{id}")]
     public IActionResult DeletePermanently(string id)
     {
-        if (MyTrash().All(f => f.Id != id)) return NotInTrash(id);
+        var form = MyTrash().FirstOrDefault(f => f.Id == id);
+        if (form is null) return NotInTrash(id);
 
         // Se miran las imagenes antes de borrar: despues ya no hay de donde sacarlas.
         var paths = store.GetImagePaths(id, includeTrashed: true);
+
+        // Y a quien avisar, por lo mismo: al borrarse el formulario se van con
+        // el sus compartidos, y despues no quedaria a quien mandarle el aviso.
+        var destinatarios = notifier.Recipients(form);
+        var titulo = form.Title;
 
         if (!store.PermanentDeleteForm(id)) return NotInTrash(id);
 
         notifications.RemoveForForms([id]);
         foreach (var path in paths) images.Delete(path);
+
+        // Despues de limpiar los avisos viejos, no antes: si no, este se iria
+        // con ellos.
+        notifier.NotifyDeleted(destinatarios, titulo);
 
         return NoContent();
     }
@@ -65,6 +76,12 @@ public class TrashController(
             .SelectMany(f => store.GetImagePaths(f.Id, includeTrashed: true))
             .ToList();
 
+        // Igual que al borrar uno solo: los destinatarios y el titulo se guardan
+        // antes, porque el borrado se lleva por delante los compartidos.
+        var avisos = mine.ToDictionary(
+            f => f.Id,
+            f => (Destinatarios: notifier.Recipients(f), f.Title));
+
         var deletedIds = mine
             .Where(f => store.PermanentDeleteForm(f.Id))
             .Select(f => f.Id)
@@ -72,6 +89,13 @@ public class TrashController(
 
         backgrounds.ForEach(images.Delete);
         notifications.RemoveForForms(deletedIds);
+
+        // Solo de los que se borraron de verdad.
+        foreach (var id in deletedIds)
+        {
+            var (destinatarios, titulo) = avisos[id];
+            notifier.NotifyDeleted(destinatarios, titulo);
+        }
 
         return Ok(new { deleted = deletedIds.Count });
     }

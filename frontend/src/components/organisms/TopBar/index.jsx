@@ -291,14 +291,14 @@ function TopBar() {
             aria-expanded={menuOpen}
             aria-label="Menu de usuario"
           >
-            <Avatar $size={32}>{initialsOf(user?.displayName)}</Avatar>
+            <Avatar $size={32} $src={user?.avatarUrl}>{initialsOf(user?.displayName)}</Avatar>
             <Chevron $open={menuOpen}><FiChevronDown size={15} /></Chevron>
           </AvatarButton>
 
           {menuOpen && (
             <Menu role="menu">
               <MenuHeader>
-                <Avatar $size={38}>{initialsOf(user?.displayName)}</Avatar>
+                <Avatar $size={38} $src={user?.avatarUrl}>{initialsOf(user?.displayName)}</Avatar>
                 <MenuIdentity>
                   <strong>{user?.displayName ?? "Sin sesion"}</strong>
                   <span>{user?.email}</span>

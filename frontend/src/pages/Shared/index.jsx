@@ -41,7 +41,7 @@ function Shared() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const toast = useToast();
-  const { forms, status, error, reload, removeFormLocally } = useForms();
+  const { forms, status, error, reload, removeFormLocally, duplicateForm } = useForms();
 
   const [tab, setTab] = useState("privados");
   const [search, setSearch] = useState("");
@@ -163,6 +163,7 @@ function Shared() {
                   onEdit={() => navigate(`/formularios/${f.id}/editar`)}
                   onPreview={() => navigate(`/formularios/${f.id}/vista`)}
                   onResults={() => navigate(`/formularios/${f.id}/resultados`)}
+                  onDuplicate={f.access === "owner" || f.access === "edit" ? () => duplicateForm(f.id) : undefined}
                   onLeave={() => leave(f)}
                 />
               ))

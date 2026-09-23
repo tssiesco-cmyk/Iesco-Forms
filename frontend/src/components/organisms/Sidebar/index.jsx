@@ -126,6 +126,7 @@ function Sidebar() {
           role={user?.role ?? ""}
           email={user?.email}
           initial={initialsOf(user?.displayName)}
+          avatarUrl={user?.avatarUrl}
           onLogout={logout}
         />
       </SidebarBottom>

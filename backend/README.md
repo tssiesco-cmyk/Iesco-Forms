@@ -59,8 +59,15 @@ o de la red interna.
 | POST | `/api/forms/from-template/{templateId}` | Crea uno copiando una plantilla |
 | PATCH | `/api/forms/{id}` | Cambia `title`, `description` o `status` |
 | DELETE | `/api/forms/{id}` | Lo manda a la papelera (no lo borra) |
+| POST | `/api/forms/{id}/duplicate` | Copia sin respuestas, compartidos, enlaces ni cierre; nace en borrador |
+| PATCH | `/api/forms/{id}/settings` | Cierre y mensaje final — `{ closesAt, clearClosesAt, maxResponses, confirmationMessage }` |
+| POST | `/api/forms/{id}/save-as-template` | Lo guarda como plantilla del equipo — `{ name, description }` |
+| GET | `/api/forms/{id}/activity` | Historial: quien hizo que y cuando (ultimas 100 lineas) |
 
 `status` solo acepta `"Borrador"` o `"Activo"`.
+
+`maxResponses: 0` quita el cupo. El formulario trae `isClosed`, calculado al
+leer: `true` si paso `closesAt` o si `responseCount` llego a `maxResponses`.
 
 ### Preguntas y opciones
 
@@ -93,9 +100,12 @@ Las de opcion nacen con dos opciones; las de texto no admiten opciones.
 |---|---|---|
 | GET | `/api/forms/{id}/responses` | De la mas reciente a la mas antigua |
 | POST | `/api/forms/{id}/responses` | Registra una respuesta |
+| DELETE | `/api/forms/{id}/responses/{responseId}` | La borra para siempre (pide permiso de edicion) |
 
-Al enviar se valida que el formulario este publicado (si no, `409`) y que vengan
-las preguntas y campos obligatorios (si no, `400`).
+Al enviar se valida que el formulario este publicado (si no, `409`), que no haya
+cerrado por fecha o cupo (si no, `410`) y que vengan las preguntas y campos
+obligatorios (si no, `400`). Se admiten 60 envios por minuto por IP (`429`).
+El login tiene su propio limite: 10 intentos cada 5 minutos por IP.
 
 `answers` va indexado por id de pregunta: cadena para texto y opcion unica (el id
 de la opcion), arreglo de ids para opcion multiple.
@@ -115,13 +125,18 @@ de la opcion), arreglo de ids para opcion multiple.
 | POST | `/api/trash/{id}/restore` | Lo devuelve al listado |
 | DELETE | `/api/trash/{id}` | Borrado definitivo, con sus respuestas |
 | DELETE | `/api/trash` | Vacia la papelera |
-| GET | `/api/templates` | Las 9 plantillas |
+| GET | `/api/templates` | Las del equipo y despues las del catalogo |
 | GET | `/api/templates/{id}` | Una plantilla |
+| DELETE | `/api/templates/{id}` | Borra una del equipo (su autor o un administrador) |
 
-Las plantillas no estan en la base: viven en `Services/SeedData.cs`. Son un
-catalogo fijo, igual para todos y de solo lectura, asi que se editan ahi y el
+Las plantillas del catalogo no estan en la base: viven en `Services/SeedData.cs`.
+Son fijas, iguales para todos y de solo lectura, asi que se editan ahi y el
 cambio viaja en el repositorio como cualquier otro. Crear un formulario a partir
 de una plantilla si guarda una copia en `Forms`, independiente del original.
+
+Las del equipo se guardan desde un formulario (`save-as-template`) en la tabla
+`UserTemplates` (script `10`), con el contenido en JSON. Las ve todo el equipo,
+con la categoria "Del equipo", y llevan copia propia de sus imagenes.
 
 En bases creadas antes de este cambio hay que ejecutar
 `Database/06_plantillas_en_codigo.sql`, que borra las tres tablas que sobran.
@@ -176,8 +191,39 @@ responder sin un `?link={token}` vigente. Un enlace dura como mucho un ano. En
 bases creadas antes de este cambio hay que ejecutar
 `Database/05_enlaces_con_vencimiento.sql`.
 
+### Notificaciones
 
+| Metodo | Ruta | Que hace |
+|---|---|---|
+| GET | `/api/notifications` | Tus avisos, del mas reciente al mas antiguo |
+| GET | `/api/notifications/unread-count` | Solo el numero, para la campana |
+| POST | `/api/notifications/{id}/read` | Marca uno como leido |
+| POST | `/api/notifications/read-all` | Marca todos |
 
+**Que se avisa.** Todo lo que pasa en un formulario (crear, editar, publicar,
+despublicar, respuestas nuevas, papelera, restaurar, borrado definitivo,
+compartir, dejar de compartir, hacerlo publico o privado y los enlaces para
+responder), lo que cambia en tu cuenta (perfil, contrasena, contrasena
+restablecida por un administrador) y la gestion de usuarios (cuenta creada, rol
+cambiado, activada o desactivada).
+
+**A quien.** Los avisos de un formulario llegan a su dueno **y a todas las
+personas con las que esta compartido**: son las que lo ven, asi que son las que
+tienen que enterarse. Lo reparte `FormNotifier`, para no repetir la consulta de
+compartidos en cada controlador. Los de cuenta llegan solo a su dueno, y los de
+gestion de usuarios a la persona afectada y al administrador que lo hizo.
+
+Se avisa tambien a quien hizo el cambio: la campana hace de registro de
+actividad. Los eventos del mismo tipo se agrupan mientras el aviso siga sin
+leer, asi que teclear un titulo no genera un aviso por pulsacion.
+
+**Los que no van de un formulario** (cuenta, usuarios y el de borrado
+definitivo, cuyo formulario ya no existe) se guardan con `FormId` en null; el
+campo `Subject` dice de que tratan. Antes ese campo se llamaba `FormTitle` y
+`FormId` era obligatorio, asi que no cabia ningun aviso que no fuera de un
+formulario. En bases creadas antes de este cambio hay que ejecutar
+`Database/09_avisos_generales.sql`. Cada tipo nuevo hay que anadirlo ademas al
+`CHECK` de la tabla y darle texto en el panel del frontend.
 
 ### Mi cuenta
 
@@ -185,6 +231,17 @@ bases creadas antes de este cambio hay que ejecutar
 |---|---|---|
 | PATCH | `/api/account` | Cambia el nombre — `{ displayName }` |
 | POST | `/api/account/password` | `{ currentPassword, newPassword }` |
+| POST | `/api/account/avatar` | Sube la foto de perfil — `multipart/form-data`, campo `file` |
+| DELETE | `/api/account/avatar` | Quita la foto: se vuelve a las iniciales |
+
+**Foto de perfil.** Las tres devuelven el perfil ya actualizado. La foto se
+guarda en `wwwroot/uploads/avatars` y en `Users.AvatarUrl` viaja solo su ruta
+publica; vacia significa "sin foto" y la interfaz pinta entonces las iniciales.
+Valen PNG, JPG y WebP hasta 5 MB, validados por los primeros bytes del archivo
+igual que los fondos. Al cambiarla o quitarla se borra el archivo anterior. La
+ruta acompana tambien al usuario en `/api/directory/users` y en los compartidos
+de un formulario, para poder verla junto a los demas. En bases creadas antes de
+este cambio hay que ejecutar `Database/08_foto_de_perfil.sql`.
 
 ### Usuarios (solo Administrador)
 

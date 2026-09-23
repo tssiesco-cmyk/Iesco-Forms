@@ -160,6 +160,18 @@ export const formsApi = {
   createFromTemplate: (templateId) => post(`/forms/from-template/${templateId}`),
   update: (id, changes) => patch(`/forms/${id}`, changes),
   trash: (id) => del(`/forms/${id}`),
+  /** Copia sin respuestas, compartidos ni enlaces. Devuelve el formulario nuevo. */
+  duplicate: (id) => post(`/forms/${id}/duplicate`),
+  /** Guarda el formulario como plantilla del equipo. Devuelve la plantilla. */
+  saveAsTemplate: (id, name, description) =>
+    post(`/forms/${id}/save-as-template`, { name, description }),
+  /**
+   * Cierre y mensaje final: { closesAt, clearClosesAt, maxResponses, confirmationMessage }.
+   * maxResponses 0 quita el limite. Devuelve el formulario actualizado.
+   */
+  updateSettings: (id, changes) => patch(`/forms/${id}/settings`, changes),
+  /** Historial: quien hizo que y cuando, lo mas reciente primero. */
+  activity: (id, options) => get(`/forms/${id}/activity`, options),
 
   addQuestion: (formId, type) => post(`/forms/${formId}/questions`, { type }),
   updateQuestion: (formId, questionId, changes) =>
@@ -201,6 +213,8 @@ export const responsesApi = {
       `/forms/${formId}/responses${link ? `?link=${encodeURIComponent(link)}` : ""}`,
       { answers, respondent }
     ),
+  /** Borra una respuesta para siempre. Pide permiso de edicion. */
+  remove: (formId, responseId) => del(`/forms/${formId}/responses/${responseId}`),
 };
 
 export const trashApi = {
@@ -210,8 +224,13 @@ export const trashApi = {
   empty: () => del("/trash"),
 };
 
+/**
+ * Las del equipo (isCustom, con ownerName y canDelete) vienen primero; despues
+ * las del catalogo, que no se pueden borrar.
+ */
 export const templatesApi = {
   list: (options) => get("/templates", options),
+  remove: (id) => del(`/templates/${id}`),
 };
 
 export const notificationsApi = {
@@ -276,6 +295,10 @@ export const accountApi = {
   update: (displayName) => patch("/account", { displayName }),
   changePassword: (currentPassword, newPassword) =>
     post("/account/password", { currentPassword, newPassword }),
+
+  // Las dos devuelven el perfil ya actualizado, para refrescar la sesion.
+  uploadAvatar: (file) => upload("/account/avatar", file),
+  removeAvatar: () => del("/account/avatar"),
 };
 
 /** Gestion de usuarios. El backend responde 403 a quien no es Administrador. */

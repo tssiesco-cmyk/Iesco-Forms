@@ -6,9 +6,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import {
   FiArrowLeft, FiEdit3, FiEye, FiUsers, FiCheckCircle,
-  FiMessageSquare, FiClock, FiTrendingUp, FiPercent, FiDownload
+  FiMessageSquare, FiClock, FiTrendingUp, FiPercent, FiDownload,
+  FiCalendar, FiChevronLeft, FiChevronRight, FiTrash2, FiAlertTriangle, FiX
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
+import { responsesApi } from "../../services/api";
 import { useToast } from "../../context/ToastContext";
 import Button from "../../components/atoms/Button";
 import Avatar from "../../components/atoms/Avatar";
@@ -468,7 +470,215 @@ const EmptyMsg = styled.p`
   padding: 40px;
 `;
 
+/* ===== FILTRO POR FECHA ===== */
+const FilterBar = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  background: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.radii.lg};
+`;
+
+const FilterLabel = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+
+  input {
+    padding: 6px 8px;
+    border: 1px solid ${({ theme }) => theme.colors.border};
+    border-radius: ${({ theme }) => theme.radii.md};
+    background: ${({ theme }) => theme.colors.background};
+    color: ${({ theme }) => theme.colors.text};
+    font-size: ${({ theme }) => theme.fontSizes.sm};
+  }
+`;
+
+const PresetBtn = styled.button`
+  padding: 6px 10px;
+  border-radius: ${({ theme }) => theme.radii.md};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ $active, theme }) => $active ? theme.colors.primary : theme.colors.textSecondary};
+  background: ${({ $active, theme }) => $active ? theme.colors.primaryLight : theme.colors.surfaceAlt};
+  font-weight: ${({ $active, theme }) => $active ? theme.fontWeights.medium : theme.fontWeights.normal};
+  &:hover { color: ${({ theme }) => theme.colors.primary}; }
+`;
+
+const FilterCount = styled.span`
+  margin-left: auto;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textMuted};
+`;
+
+/* ===== VISTA INDIVIDUAL ===== */
+const IndividualNav = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+`;
+
+const NavGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  span {
+    font-size: ${({ theme }) => theme.fontSizes.base};
+    color: ${({ theme }) => theme.colors.textSecondary};
+    min-width: 70px;
+    text-align: center;
+  }
+`;
+
+const DetailMeta = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: ${({ theme }) => theme.fontSizes.md};
+  color: ${({ theme }) => theme.colors.textMuted};
+  margin-bottom: 16px;
+`;
+
+const FieldGrid = styled.dl`
+  display: grid;
+  grid-template-columns: minmax(120px, 200px) 1fr;
+  gap: 8px 16px;
+  margin: 0;
+
+  dt {
+    font-size: ${({ theme }) => theme.fontSizes.md};
+    color: ${({ theme }) => theme.colors.textMuted};
+  }
+
+  dd {
+    margin: 0;
+    font-size: ${({ theme }) => theme.fontSizes.base};
+    color: ${({ theme }) => theme.colors.text};
+    word-break: break-word;
+  }
+`;
+
+const AnswerText = styled.div`
+  font-size: ${({ theme }) => theme.fontSizes.base};
+  line-height: 1.5;
+  white-space: pre-line;
+  word-break: break-word;
+  color: ${({ $muted, theme }) => $muted ? theme.colors.textMuted : theme.colors.text};
+  font-style: ${({ $muted }) => $muted ? "italic" : "normal"};
+`;
+
+const ChipList = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+`;
+
+const Chip = styled.span`
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.primaryLight};
+  color: ${({ theme }) => theme.colors.primary};
+  font-size: ${({ theme }) => theme.fontSizes.md};
+`;
+
+const ClickableRow = styled(TableRow)`
+  cursor: pointer;
+`;
+
+/* ===== MODAL DE CONFIRMACION ===== */
+const ModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: ${({ theme }) => theme.colors.overlay};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+`;
+
+const Modal = styled.div`
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  background: ${({ theme }) => theme.colors.surface};
+  border-radius: ${({ theme }) => theme.radii.xl};
+  box-shadow: ${({ theme }) => theme.shadows.modal};
+  overflow: hidden;
+`;
+
+const ModalHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.borderLight};
+
+  h2 {
+    margin: 0;
+    font-size: ${({ theme }) => theme.fontSizes.xl};
+    font-weight: ${({ theme }) => theme.fontWeights.semibold};
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+`;
+
+const ModalBody = styled.div`
+  padding: 24px;
+  font-size: ${({ theme }) => theme.fontSizes.base};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  line-height: 1.5;
+
+  strong { color: ${({ theme }) => theme.colors.text}; }
+`;
+
+const ModalActions = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid ${({ theme }) => theme.colors.borderLight};
+`;
+
+const WarningIcon = styled.span`
+  color: ${({ theme }) => theme.colors.danger};
+  display: flex;
+  align-items: center;
+`;
+
 /* ===== HELPERS ===== */
+
+/** yyyy-mm-dd en hora local, que es lo que usa un <input type="date">. */
+function toInputDate(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function daysAgo(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return toInputDate(d);
+}
+
+/** Atajos del filtro. "Todo" deja las dos fechas vacias. */
+const DATE_PRESETS = [
+  { key: "7", label: "Ultimos 7 dias", from: () => daysAgo(6) },
+  { key: "30", label: "Ultimos 30 dias", from: () => daysAgo(29) },
+  { key: "all", label: "Todo", from: () => "" },
+];
+
+/** Una respuesta tiene algo si trae texto o al menos una opcion. */
+function hasValue(answer) {
+  if (answer === null || answer === undefined) return false;
+  return Array.isArray(answer) ? answer.length > 0 : answer.toString().trim() !== "";
+}
 // Compartidos con el informe en PDF, para que cada opcion tenga el mismo color.
 const chartColors = CHART_COLORS;
 
@@ -533,6 +743,17 @@ function FormResults() {
   const [downloading, setDownloading] = useState(false);
   const toast = useToast();
 
+  // Filtro por fecha: cadenas yyyy-mm-dd de los <input type="date">. Vacias = sin limite.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // Vista individual: cual se ve y el borrado con confirmacion.
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  // Las borradas se esconden al momento, sin esperar a recargar la lista.
+  const [deletedIds, setDeletedIds] = useState(() => new Set());
+
   // Las respuestas no vienen en la carga inicial: se piden al entrar aqui.
   const [responsesState, setResponsesState] = useState("loading");
   const [responsesError, setResponsesError] = useState(null);
@@ -561,7 +782,19 @@ function FormResults() {
   }, [id, loadResponses]);
 
   const form = getForm(id);
-  const formResponses = getFormResponses(id);
+  const allResponses = getFormResponses(id).filter((r) => !deletedIds.has(r.id));
+
+  // Todo lo de abajo (KPIs, graficos, tabla, individual y PDF) usa la lista
+  // filtrada: el informe descargado dice lo mismo que la pantalla.
+  const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+  const toTime = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
+  const isFiltered = fromTime !== null || toTime !== null;
+  const formResponses = isFiltered
+    ? allResponses.filter((r) => {
+      const t = new Date(r.submittedAt).getTime();
+      return (fromTime === null || t >= fromTime) && (toTime === null || t <= toTime);
+    })
+    : allResponses;
 
   if (status === "loading") {
     return <Page><Main><LoadingState text="Cargando formulario..." /></Main></Page>;
@@ -651,6 +884,84 @@ function FormResults() {
     ).length;
   };
 
+  const canDelete = form.access === "owner" || form.access === "edit";
+
+  // Si se filtra o se borra, el indice puede quedar fuera de la lista.
+  const safeIndex = Math.min(currentIndex, Math.max(totalResponses - 1, 0));
+  const current = totalResponses > 0 ? formResponses[safeIndex] : null;
+
+  const activePreset = !dateTo
+    ? DATE_PRESETS.find((p) => p.from() === dateFrom)?.key
+    : undefined;
+
+  const applyPreset = (preset) => {
+    setDateFrom(preset.from());
+    setDateTo("");
+    setCurrentIndex(0);
+  };
+
+  const openIndividual = (index) => {
+    setCurrentIndex(index);
+    setActiveTab("individual");
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete || deleting) return;
+
+    setDeleting(true);
+    try {
+      await responsesApi.remove(id, confirmDelete.id);
+      setDeletedIds((prev) => new Set(prev).add(confirmDelete.id));
+      setConfirmDelete(null);
+      toast.success("Respuesta borrada");
+      // En segundo plano, para que contadores y demas pantallas queden al dia.
+      loadResponses(id);
+    } catch (err) {
+      toast.error(`No se pudo borrar la respuesta: ${err.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  /** Texto de lo elegido; una opcion borrada ya no tiene texto que mostrar. */
+  const optionText = (question, optionId) =>
+    question.options.find((o) => o.id === optionId)?.text ?? "(opcion eliminada)";
+
+  const renderAnswer = (question, answer) => {
+    if (!hasValue(answer)) return <AnswerText $muted>Sin responder</AnswerText>;
+
+    if (question.type === "multiple_choice") {
+      const ids = Array.isArray(answer) ? answer : [answer];
+      return (
+        <ChipList>
+          {ids.map((optId) => <Chip key={optId}>{optionText(question, optId)}</Chip>)}
+        </ChipList>
+      );
+    }
+
+    if (question.type === "single_choice") {
+      return <ChipList><Chip>{optionText(question, Array.isArray(answer) ? answer[0] : answer)}</Chip></ChipList>;
+    }
+
+    return <AnswerText>{answer.toString()}</AnswerText>;
+  };
+
+  /**
+   * Los datos del respondedor con su etiqueta. Si el campo se quito del
+   * formulario despues de responder, el dato sigue ahi pero sin nombre.
+   */
+  const respondentRows = (response) => {
+    const values = response.respondent || {};
+    const fields = form.introFields || [];
+    const known = fields
+      .filter((f) => hasValue(values[f.id]))
+      .map((f) => ({ key: f.id, label: f.label || "Campo", value: values[f.id] }));
+    const unknown = Object.keys(values)
+      .filter((k) => !fields.some((f) => f.id === k) && hasValue(values[k]))
+      .map((k) => ({ key: k, label: "Campo eliminado", value: values[k] }));
+    return [...known, ...unknown];
+  };
+
   return (
     <Page>
       <SidePanel>
@@ -696,7 +1007,40 @@ function FormResults() {
         <Tabs>
           <Tab $active={activeTab === "resumen"} onClick={() => setActiveTab("resumen")}>Resumen</Tab>
           <Tab $active={activeTab === "respuestas"} onClick={() => setActiveTab("respuestas")}>Respuestas ({totalResponses})</Tab>
+          <Tab $active={activeTab === "individual"} onClick={() => setActiveTab("individual")}>Individual</Tab>
         </Tabs>
+
+        {responsesState === "ready" && allResponses.length > 0 && (
+          <FilterBar>
+            <FiCalendar size={16} />
+            <FilterLabel>
+              Desde
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => { setDateFrom(e.target.value); setCurrentIndex(0); }}
+              />
+            </FilterLabel>
+            <FilterLabel>
+              Hasta
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => { setDateTo(e.target.value); setCurrentIndex(0); }}
+              />
+            </FilterLabel>
+            {DATE_PRESETS.map((p) => (
+              <PresetBtn key={p.key} $active={activePreset === p.key} onClick={() => applyPreset(p)}>
+                {p.label}
+              </PresetBtn>
+            ))}
+            {isFiltered && (
+              <FilterCount>{totalResponses} de {allResponses.length} respuestas</FilterCount>
+            )}
+          </FilterBar>
+        )}
 
         {responsesState === "loading" && <LoadingState text="Cargando respuestas..." />}
         {responsesState === "error" && (
@@ -820,7 +1164,7 @@ function FormResults() {
                 const avatarColors = ["#6542F4", "#2DB87F", "#F5A623", "#E34850", "#3B82F6", "#8B5CF6"];
 
                 return (
-                  <TableRow key={r.id}>
+                  <ClickableRow key={r.id} onClick={() => openIndividual(i)} title="Ver esta respuesta">
                     <CellText>{i + 1}</CellText>
                     <RespondentInfo>
                       <Avatar $size={30} $bg={avatarColors[i % avatarColors.length]}>{initial}</Avatar>
@@ -829,13 +1173,115 @@ function FormResults() {
                     <CellText>{email}</CellText>
                     <CellText>{formatDate(r.submittedAt)}</CellText>
                     <CellText>{answeredQ} de {questionsCount}</CellText>
-                  </TableRow>
+                  </ClickableRow>
                 );
               })}
             </Table>
           ) : (
-            <EmptyMsg>Aun no hay respuestas para este formulario.</EmptyMsg>
+            <EmptyMsg>
+              {isFiltered
+                ? "No hay respuestas en ese rango de fechas."
+                : "Aun no hay respuestas para este formulario."}
+            </EmptyMsg>
           )
+        )}
+
+        {responsesState === "ready" && activeTab === "individual" && (
+          current ? (
+            <>
+              <IndividualNav>
+                <NavGroup>
+                  <Button
+                    $variant="secondary"
+                    $size="sm"
+                    onClick={() => setCurrentIndex(safeIndex - 1)}
+                    disabled={safeIndex === 0}
+                    title="Anterior"
+                  >
+                    <FiChevronLeft size={16} />
+                  </Button>
+                  <span>{safeIndex + 1} de {totalResponses}</span>
+                  <Button
+                    $variant="secondary"
+                    $size="sm"
+                    onClick={() => setCurrentIndex(safeIndex + 1)}
+                    disabled={safeIndex >= totalResponses - 1}
+                    title="Siguiente"
+                  >
+                    <FiChevronRight size={16} />
+                  </Button>
+                </NavGroup>
+                {canDelete && (
+                  <Button $variant="danger" $size="sm" onClick={() => setConfirmDelete(current)}>
+                    <FiTrash2 size={14} /> Borrar respuesta
+                  </Button>
+                )}
+              </IndividualNav>
+
+              <DetailMeta>
+                <FiClock size={14} /> Enviada el {formatDate(current.submittedAt)}
+              </DetailMeta>
+
+              {respondentRows(current).length > 0 && (
+                <QuestionBlock>
+                  <QHeader><QTitle>Datos del respondedor</QTitle></QHeader>
+                  <FieldGrid>
+                    {respondentRows(current).map((row) => (
+                      <div key={row.key} style={{ display: "contents" }}>
+                        <dt>{row.label}</dt>
+                        <dd>{row.value}</dd>
+                      </div>
+                    ))}
+                  </FieldGrid>
+                </QuestionBlock>
+              )}
+
+              {form.questions.map((q, i) => (
+                <QuestionBlock key={q.id}>
+                  <QHeader>
+                    <QTitle><QNum>{i + 1}</QNum>{q.title || "Pregunta sin titulo"}</QTitle>
+                    <QType>{typeLabels[q.type]}</QType>
+                  </QHeader>
+                  <div style={{ marginTop: 12 }}>{renderAnswer(q, current.answers?.[q.id])}</div>
+                </QuestionBlock>
+              ))}
+            </>
+          ) : (
+            <EmptyMsg>
+              {isFiltered
+                ? "No hay respuestas en ese rango de fechas."
+                : "Aun no hay respuestas para este formulario."}
+            </EmptyMsg>
+          )
+        )}
+
+        {confirmDelete && (
+          <ModalOverlay onClick={() => !deleting && setConfirmDelete(null)}>
+            <Modal onClick={(e) => e.stopPropagation()}>
+              <ModalHeader>
+                <h2>
+                  <WarningIcon><FiAlertTriangle size={20} /></WarningIcon>
+                  Borrar respuesta
+                </h2>
+                <Button $variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+                  <FiX size={18} />
+                </Button>
+              </ModalHeader>
+              <ModalBody>
+                Se borrara para siempre la respuesta de <strong>{getRespondentName(confirmDelete)}</strong>{" "}
+                enviada el {formatDate(confirmDelete.submittedAt)}. Esta accion no se puede deshacer.
+              </ModalBody>
+              <ModalActions>
+                <Button $variant="secondary" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+                  Cancelar
+                </Button>
+                <Button $variant="danger" onClick={handleDelete} disabled={deleting}>
+                  {deleting && <Spinner $size={13} $color="currentColor" />}
+                  {deleting ? "Borrando..." : "Borrar respuesta"}
+                </Button>
+              </ModalActions>
+            </Modal>
+          </ModalOverlay>
         )}
 
         {/* En las dos pestanas, en el mismo sitio: el informe es el mismo. */}

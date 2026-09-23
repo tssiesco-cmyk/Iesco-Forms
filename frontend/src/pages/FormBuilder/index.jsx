@@ -6,7 +6,7 @@ import {
   FiCircle, FiCheckSquare, FiChevronUp, FiChevronDown,
   FiEye, FiX, FiBarChart2, FiUser, FiToggleLeft, FiToggleRight, FiMail, FiPhone,
   FiSend, FiRotateCcw, FiCheck, FiAlertCircle, FiImage, FiUpload,
-  FiCopy, FiChevronsLeft, FiChevronsRight, FiShare2, FiLayout
+  FiCopy, FiChevronsLeft, FiChevronsRight, FiShare2, FiLayout, FiClock, FiBookmark
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import Button from "../../components/atoms/Button";
@@ -15,6 +15,9 @@ import Spinner from "../../components/atoms/Spinner";
 import { ErrorState, LoadingState } from "../../components/molecules/StateView";
 import ShareFormModal from "../../components/organisms/ShareFormModal";
 import FormLinksPanel from "../../components/organisms/FormLinksPanel";
+import ClosingSettings from "../../components/organisms/ClosingSettings";
+import SaveTemplateModal from "../../components/organisms/SaveTemplateModal";
+import ActivityPanel from "../../components/organisms/ActivityPanel";
 
 const Page = styled.div`
   display: flex;
@@ -892,6 +895,8 @@ function FormBuilder() {
   const [uploadingQuestion, setUploadingQuestion] = useState(false);
   const [uploadingIntro, setUploadingIntro] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const fileInputRef = useRef(null);
   const questionFileInputRef = useRef(null);
   const introFileInputRef = useRef(null);
@@ -1066,9 +1071,20 @@ function FormBuilder() {
 
   const handleUnpublish = () => updateForm(id, { status: "Borrador" });
 
+  // Guardar como plantilla y el cierre piden poder editar, igual que el backend.
+  const canEdit = form.access === "owner" || form.access === "edit";
+
+  const openSaveTemplate = () => {
+    // La plantilla se saca del servidor: lo escrito debe estar guardado antes.
+    flushPendingWrites();
+    setSavingTemplate(true);
+  };
+
   return (
     <Page>
       {sharing && <ShareFormModal form={form} onClose={() => setSharing(false)} />}
+      {savingTemplate && <SaveTemplateModal form={form} onClose={() => setSavingTemplate(false)} />}
+      {historyOpen && <ActivityPanel formId={id} open onClose={() => setHistoryOpen(false)} />}
 
       <LeftPanel>
         <PanelHeader>
@@ -1335,7 +1351,9 @@ function FormBuilder() {
           )}
         </CaseSection>
 
-        <FormLinksPanel formId={id} isPublished={isPublished} />
+        {canEdit && <ClosingSettings key={form.id} form={form} />}
+
+        <FormLinksPanel formId={id} isPublished={isPublished} formTitle={form.title} />
       </LeftPanel>
 
       <MainEditor>
@@ -1361,6 +1379,24 @@ function FormBuilder() {
           </ToolbarStatus>
 
           <ToolbarActions>
+            <Button
+              $variant="secondary"
+              $size="sm"
+              onClick={() => setHistoryOpen(true)}
+              title="Quien hizo que en este formulario"
+            >
+              <FiClock size={14} /> Historial
+            </Button>
+            {canEdit && (
+              <Button
+                $variant="secondary"
+                $size="sm"
+                onClick={openSaveTemplate}
+                title="Guardar como plantilla del equipo"
+              >
+                <FiBookmark size={14} /> Plantilla
+              </Button>
+            )}
             {form.access === "owner" && (
               <Button $variant="secondary" $size="sm" onClick={() => setSharing(true)}>
                 <FiShare2 size={14} /> Compartir

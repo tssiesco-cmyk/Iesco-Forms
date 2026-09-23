@@ -3,6 +3,7 @@ using IescoForms.Api.Models;
 using IescoForms.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace IescoForms.Api.Controllers;
 
@@ -11,10 +12,13 @@ namespace IescoForms.Api.Controllers;
 [Route("api/forms/{formId}/responses")]
 public class ResponsesController(
     IFormStore store,
-    INotificationStore notifications,
+    FormNotifier notifier,
     IFormLinkStore links,
     FormAccess access) : ControllerBase
 {
+    /// <summary>Limite de envios por IP; se registra en Program.cs.</summary>
+    public const string SubmitPolicy = "submit-response";
+
     /// <summary>
     /// Respuestas de un formulario, de la mas reciente a la mas antigua. Las ve
     /// quien tenga cualquier acceso, incluido el permiso de solo ver. Sin acceso
@@ -41,6 +45,7 @@ public class ResponsesController(
     /// deja de servir tambien para enviar, no solo para abrir.
     /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting(SubmitPolicy)]
     [HttpPost]
     public ActionResult<FormResponse> Submit(string formId, [FromBody] SubmitResponseRequest request, [FromQuery] string? link)
     {
@@ -67,6 +72,13 @@ public class ResponsesController(
         {
             return Problem("El formulario todavia es un borrador y no acepta respuestas.",
                 statusCode: StatusCodes.Status409Conflict);
+        }
+
+        // Cierre por fecha o por cupo. Vale igual con sesion o con enlace.
+        if (form.IsClosed)
+        {
+            return Problem("Este formulario ya cerro y no acepta mas respuestas.",
+                statusCode: StatusCodes.Status410Gone);
         }
 
         // Las preguntas obligatorias deben venir contestadas.
@@ -104,11 +116,36 @@ public class ResponsesController(
             return Problem($"No existe el formulario '{formId}'.", statusCode: StatusCodes.Status404NotFound);
         }
 
-        // Avisar al dueno. Si el formulario no tiene dueno no avisa a nadie, y
-        // esto nunca debe tumbar un envio que ya se guardo bien.
-        notifications.Record(form.OwnerId, NotificationType.NewResponses, form.Id, form.Title);
+        // Avisar al dueno y a quienes colaboran en el formulario: la respuesta
+        // le interesa a todo el que trabaja con el, no solo a quien lo creo.
+        // Si no tiene dueno ni compartidos no avisa a nadie, y esto nunca debe
+        // tumbar un envio que ya se guardo bien.
+        notifier.Notify(form, NotificationType.NewResponses);
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Borra una respuesta para siempre (una de prueba, una repetida). Pide
+    /// permiso de edicion: quien solo ve resultados no puede hacerlos cambiar.
+    /// Queda en el historial, pero sin aviso.
+    /// </summary>
+    [HttpDelete("{responseId}")]
+    public IActionResult Delete(string formId, string responseId)
+    {
+        var form = store.GetForm(formId);
+        if (form is null || access.LevelFor(form) < FormAccessLevel.Edit)
+        {
+            return Problem($"No existe el formulario '{formId}'.", statusCode: StatusCodes.Status404NotFound);
+        }
+
+        if (!store.DeleteResponse(formId, responseId))
+        {
+            return Problem("Esa respuesta no existe o ya se borro.", statusCode: StatusCodes.Status404NotFound);
+        }
+
+        notifier.Log(form, FormActivityAction.ResponseDeleted);
+        return NoContent();
     }
 
     /// <summary>

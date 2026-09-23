@@ -15,8 +15,29 @@ public interface IFormStore
     IReadOnlyList<Form> GetForms();
     Form? GetForm(string id);
     Form CreateForm(string? title, string? description, string ownerId);
-    Form? CreateFormFromTemplate(string templateId, string ownerId);
+
+    /// <summary>
+    /// Crea un formulario a partir de una plantilla: del catalogo, de un usuario
+    /// o la copia de otro formulario (duplicar). Las rutas de imagen se usan tal
+    /// cual: si hay que copiar archivos, lo hace quien llama antes.
+    /// </summary>
+    /// <param name="title">Titulo del nuevo; null usa el nombre de la plantilla.</param>
+    Form CreateFormFrom(Template template, string ownerId, string? title = null);
+
+    /// <summary>
+    /// Copia completa de un formulario como plantilla: preguntas, opciones,
+    /// campos, portada, fondos y mensaje final. Sin respuestas, ni compartidos,
+    /// ni cierre. Null si no existe.
+    /// </summary>
+    Template? ToTemplate(string formId);
+
     Form? UpdateForm(string id, string? title, string? description, string? status);
+
+    /// <summary>
+    /// Cierre y mensaje final. Los nulos no se tocan; para quitar la fecha va
+    /// <paramref name="clearClosesAt"/>, y un cupo de 0 quita el limite.
+    /// </summary>
+    Form? UpdateSettings(string formId, DateTimeOffset? closesAt, bool clearClosesAt, int? maxResponses, string? confirmationMessage);
 
     /// <summary>
     /// Cambia la imagen de fondo. Devuelve la ruta de la anterior (o null) para
@@ -75,6 +96,9 @@ public interface IFormStore
     IReadOnlyList<FormResponse> GetResponses(string formId);
     FormResponse? AddResponse(string formId, Dictionary<string, JsonNode?>? answers, Dictionary<string, string>? respondent);
 
-    // --- Plantillas (solo lectura) ---
+    /// <summary>Borra una respuesta para siempre. False si no es de ese formulario.</summary>
+    bool DeleteResponse(string formId, string responseId);
+
+    // --- Plantillas del catalogo (solo lectura) ---
     IReadOnlyList<Template> GetTemplates();
 }

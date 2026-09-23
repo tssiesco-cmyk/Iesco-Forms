@@ -17,6 +17,7 @@ namespace IescoForms.Api.Controllers;
 public class FormLinksController(
     IFormStore store,
     IFormLinkStore links,
+    FormNotifier notifier,
     FormAccess access) : ControllerBase
 {
     /// <summary>Tope para no dejar enlaces abiertos practicamente para siempre.</summary>
@@ -32,29 +33,38 @@ public class FormLinksController(
     [HttpPost("api/forms/{formId}/links")]
     public ActionResult<FormLink> Create(string formId, [FromBody] FormLinkExpiryRequest request)
     {
-        if (Editable(formId) is null) return FormNotFound(formId);
+        if (Editable(formId) is not { } form) return FormNotFound(formId);
         if (InvalidExpiry(request.ExpiresAt) is { } problem) return problem;
 
-        return Ok(links.Create(formId, request.ExpiresAt!.Value, access.CurrentUserId));
+        var link = links.Create(formId, request.ExpiresAt!.Value, access.CurrentUserId);
+        notifier.Notify(form, NotificationType.FormLink);
+
+        return Ok(link);
     }
 
     /// <summary>Cambia la hora de vencimiento. Sirve tambien para reabrir uno vencido.</summary>
     [HttpPatch("api/forms/{formId}/links/{linkId}")]
     public ActionResult<FormLink> UpdateExpiry(string formId, string linkId, [FromBody] FormLinkExpiryRequest request)
     {
-        if (Editable(formId) is null) return FormNotFound(formId);
+        if (Editable(formId) is not { } form) return FormNotFound(formId);
         if (InvalidExpiry(request.ExpiresAt) is { } problem) return problem;
 
         var updated = links.UpdateExpiry(formId, linkId, request.ExpiresAt!.Value);
-        return updated is null ? LinkNotFound() : Ok(updated);
+        if (updated is null) return LinkNotFound();
+
+        notifier.Notify(form, NotificationType.FormLink);
+        return Ok(updated);
     }
 
     /// <summary>Anula el enlace al momento, aunque no haya vencido.</summary>
     [HttpDelete("api/forms/{formId}/links/{linkId}")]
     public IActionResult Delete(string formId, string linkId)
     {
-        if (Editable(formId) is null) return FormNotFound(formId);
-        return links.Delete(formId, linkId) ? NoContent() : LinkNotFound();
+        if (Editable(formId) is not { } form) return FormNotFound(formId);
+        if (!links.Delete(formId, linkId)) return LinkNotFound();
+
+        notifier.Notify(form, NotificationType.FormLink);
+        return NoContent();
     }
 
     /// <summary>

@@ -14,12 +14,12 @@ namespace IescoForms.Api.Controllers;
 [Route("api/directory")]
 public class DirectoryController(IUserStore users) : ControllerBase
 {
-    public record DirectoryUser(string Id, string DisplayName, string Email);
+    public record DirectoryUser(string Id, string DisplayName, string Email, string AvatarUrl);
 
     [HttpGet("users")]
     public ActionResult<IReadOnlyList<DirectoryUser>> Users() =>
         Ok(users.List()
             .Where(u => u.IsActive)
-            .Select(u => new DirectoryUser(u.Id, u.DisplayName, u.Email))
+            .Select(u => new DirectoryUser(u.Id, u.DisplayName, u.Email, u.AvatarUrl))
             .ToList());
 }

@@ -20,6 +20,20 @@ public record UpdateFormRequest(
     [MaxLength(1000)] string? Description,
     string? Status);
 
+/// <summary>
+/// Cierre y mensaje final. Null = no tocar. Para quitar la fecha va
+/// ClearClosesAt; un MaxResponses de 0 quita el cupo.
+/// </summary>
+public record UpdateFormSettingsRequest(
+    DateTimeOffset? ClosesAt,
+    bool? ClearClosesAt,
+    [Range(0, 1_000_000)] int? MaxResponses,
+    [MaxLength(1000)] string? ConfirmationMessage);
+
+public record SaveAsTemplateRequest(
+    [MaxLength(200)] string? Name,
+    [MaxLength(1000)] string? Description);
+
 public record AddQuestionRequest([Required] string Type);
 
 public record UpdateQuestionRequest(

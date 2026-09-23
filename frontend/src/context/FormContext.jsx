@@ -235,6 +235,53 @@ export function FormProvider({ children }) {
   }, [runWrite]);
 
   /**
+   * Copia un formulario (sin respuestas, compartidos ni enlaces). La copia nace
+   * en borrador y es de quien la pide. Devuelve el id nuevo, o null si fallo.
+   */
+  const duplicateForm = useCallback(async (formId) => {
+    const { ok, result } = await runWrite(
+      () => formsApi.duplicate(formId),
+      "No se pudo duplicar el formulario"
+    );
+    if (!ok) return null;
+
+    setForms((prev) => [result, ...prev]);
+    toast.success(`Se creo "${result.title}".`);
+    return result.id;
+  }, [runWrite, toast]);
+
+  /**
+   * Borra una plantilla del equipo. Solo llega aqui si canDelete; el backend lo
+   * vuelve a comprobar. Devuelve true si se borro.
+   */
+  const deleteTemplate = useCallback(async (templateId) => {
+    const previous = templates.find((t) => t.id === templateId);
+    if (!previous) return false;
+
+    setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+
+    const { ok } = await runWrite(
+      () => templatesApi.remove(templateId),
+      "No se pudo borrar la plantilla"
+    );
+    if (!ok) {
+      setTemplates((prev) => [previous, ...prev]);
+      return false;
+    }
+
+    toast.success(`Plantilla "${previous.name}" borrada.`);
+    return true;
+  }, [templates, runWrite, toast]);
+
+  /**
+   * Una plantilla recien guardada desde el editor aparece sin recargar. Las del
+   * equipo van delante de las del catalogo, igual que las devuelve el backend.
+   */
+  const addTemplateLocally = useCallback((template) => {
+    setTemplates((prev) => [template, ...prev.filter((t) => t.id !== template.id)]);
+  }, []);
+
+  /**
    * Cambia titulo, descripcion o estado. El titulo se escribe letra a letra, asi
    * que el cambio se ve al instante y el envio espera; publicar o despublicar va
    * directo porque es una accion puntual.
@@ -682,6 +729,9 @@ export function FormProvider({ children }) {
     updateForm,
     trashForm,
     removeFormLocally,
+    duplicateForm,
+    deleteTemplate,
+    addTemplateLocally,
     restoreForm,
     permanentDeleteForm,
     emptyTrash,

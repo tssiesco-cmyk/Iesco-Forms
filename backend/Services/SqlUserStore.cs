@@ -115,18 +115,31 @@ public class SqlUserStore(IescoFormsDbContext db) : IUserStore
         return true;
     }
 
-    public void RequestPasswordReset(string email)
+    public string? SetAvatar(string id, string avatarUrl)
     {
-        if (string.IsNullOrWhiteSpace(email)) return;
+        var row = db.Users.FirstOrDefault(u => u.Id == id);
+        if (row is null) return null;
+
+        var previous = row.AvatarUrl;
+        row.AvatarUrl = avatarUrl;
+        db.SaveChanges();
+        return previous;
+    }
+
+    public UserSummary? RequestPasswordReset(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return null;
 
         var row = db.Users.FirstOrDefault(u => u.Email == Normalize(email) && u.IsActive);
 
         // Si ya habia una pendiente se conserva la fecha original: pulsar el
-        // boton varias veces no debe hacerla parecer mas reciente.
-        if (row is null || row.PasswordResetRequestedAt is not null) return;
+        // boton varias veces no debe hacerla parecer mas reciente. Tampoco se
+        // vuelve a avisar a los administradores.
+        if (row is null || row.PasswordResetRequestedAt is not null) return null;
 
         row.PasswordResetRequestedAt = DateTimeOffset.UtcNow;
         db.SaveChanges();
+        return ToSummary(row);
     }
 
     public UserSummary? DismissPasswordReset(string id)
@@ -156,8 +169,10 @@ public class SqlUserStore(IescoFormsDbContext db) : IUserStore
         DisplayName = row.DisplayName,
         Role = row.Role,
         PasswordHash = row.PasswordHash,
+        AvatarUrl = row.AvatarUrl,
     };
 
     private static UserSummary ToSummary(UserRow row) =>
-        new(row.Id, row.Email, row.DisplayName, row.Role, row.IsActive, row.CreatedAt, row.PasswordResetRequestedAt);
+        new(row.Id, row.Email, row.DisplayName, row.AvatarUrl, row.Role,
+            row.IsActive, row.CreatedAt, row.PasswordResetRequestedAt);
 }

@@ -17,9 +17,24 @@ public interface INotificationStore
 
     /// <summary>
     /// Registra un evento. Si el usuario ya tiene un aviso sin leer del mismo
-    /// tipo y formulario, suma; si no, crea uno nuevo.
+    /// tipo, formulario y autor, suma; si no, crea uno nuevo. El autor entra en
+    /// la agrupacion para que cada aviso tenga un solo nombre: si editan Juan y
+    /// Ana, llegan dos avisos, uno de cada uno.
     /// </summary>
-    void Record(string userId, string type, string formId, string formTitle);
+    /// <param name="actorId">
+    /// Quien lo hizo. Null si fue alguien sin sesion (una respuesta por enlace)
+    /// o si no aplica.
+    /// </param>
+    /// <param name="formId">
+    /// Null en los avisos que no son de un formulario (cuenta y usuarios) y en
+    /// el de borrado definitivo, cuyo formulario ya no existe. Esos se agrupan
+    /// solo por tipo.
+    /// </param>
+    /// <param name="subject">
+    /// De que trata: el titulo del formulario, o el nombre de la persona
+    /// afectada en los avisos de usuarios.
+    /// </param>
+    void Record(string userId, string type, string? formId, string subject, string? actorId);
 
     /// <summary>Al borrar un formulario definitivamente, sus avisos sobran.</summary>
     void RemoveForForms(IEnumerable<string> formIds);

@@ -59,10 +59,14 @@ public class InMemoryNotificationStore : INotificationStore
         }
     }
 
-    public void Record(string userId, string type, string formId, string formTitle)
+    public void Record(string userId, string type, string? formId, string subject, string? actorId)
     {
         // Un formulario sin dueno no avisa a nadie.
         if (string.IsNullOrEmpty(userId)) return;
+
+        // Cadena vacia y null son lo mismo: "no va de un formulario".
+        if (string.IsNullOrEmpty(formId)) formId = null;
+        if (string.IsNullOrEmpty(actorId)) actorId = null;
 
         lock (_gate)
         {
@@ -70,6 +74,9 @@ public class InMemoryNotificationStore : INotificationStore
                 n.UserId == userId &&
                 n.FormId == formId &&
                 n.Type == type &&
+                n.ActorId == actorId &&
+                // Sin formulario, el asunto distingue a quien o a que se refiere.
+                (formId is not null || n.Subject == subject) &&
                 n.ReadAt is null);
 
             if (existing is not null)
@@ -78,7 +85,7 @@ public class InMemoryNotificationStore : INotificationStore
                 // evento abre un aviso nuevo en vez de resucitar el viejo.
                 existing.Count += 1;
                 existing.UpdatedAt = DateTimeOffset.UtcNow;
-                existing.FormTitle = formTitle;
+                existing.Subject = subject;
                 return;
             }
 
@@ -89,7 +96,8 @@ public class InMemoryNotificationStore : INotificationStore
                 UserId = userId,
                 Type = type,
                 FormId = formId,
-                FormTitle = formTitle,
+                Subject = subject,
+                ActorId = actorId,
                 Count = 1,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -104,7 +112,9 @@ public class InMemoryNotificationStore : INotificationStore
         var ids = formIds.ToHashSet();
         if (ids.Count == 0) return;
 
-        lock (_gate) _items.RemoveAll(n => ids.Contains(n.FormId));
+        // Los avisos sin formulario (cuenta, usuarios) no pertenecen a ninguno
+        // de los que se borran, asi que se quedan.
+        lock (_gate) _items.RemoveAll(n => n.FormId is not null && ids.Contains(n.FormId));
     }
 
     /// <summary>Deja solo los mas recientes. Siempre se llama dentro del lock.</summary>

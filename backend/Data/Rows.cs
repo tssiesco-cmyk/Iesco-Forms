@@ -21,6 +21,9 @@ public class UserRow
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>Ruta publica de la foto de perfil. Vacia = sin foto.</summary>
+    public string AvatarUrl { get; set; } = string.Empty;
+
     /// <summary>Solicitud pendiente de "Olvide mi contrasena", o null.</summary>
     public DateTimeOffset? PasswordResetRequestedAt { get; set; }
 }
@@ -60,6 +63,11 @@ public class FormRow
 
     /// <summary>Visible para todos en Compartidos &gt; Publicos.</summary>
     public bool IsPublic { get; set; }
+
+    /// <summary>Cierre automatico y cupo. Ver Models.Form.</summary>
+    public DateTimeOffset? ClosesAt { get; set; }
+    public int? MaxResponses { get; set; }
+    public string ConfirmationMessage { get; set; } = string.Empty;
 
     /// <summary>Control de concurrencia. Lo maneja SQL Server, nunca se asigna.</summary>
     public byte[]? RowVersion { get; set; }
@@ -165,10 +173,15 @@ public class NotificationRow
     public string Id { get; set; } = string.Empty;
     public string UserId { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;
-    public string FormId { get; set; } = string.Empty;
 
-    /// <summary>El titulo del momento, no el actual. Ver Models.Notification.</summary>
-    public string FormTitle { get; set; } = string.Empty;
+    /// <summary>Null en los avisos que no hablan de un formulario.</summary>
+    public string? FormId { get; set; }
+
+    /// <summary>El texto del momento, no el actual. Ver Models.Notification.</summary>
+    public string Subject { get; set; } = string.Empty;
+
+    /// <summary>Quien lo hizo. Sin clave foranea: si se borra el usuario, el aviso se queda.</summary>
+    public string? ActorId { get; set; }
 
     public int Count { get; set; } = 1;
     public DateTimeOffset CreatedAt { get; set; }
@@ -200,5 +213,36 @@ public class FormLinkRow
     public string Token { get; set; } = string.Empty;
     public DateTimeOffset ExpiresAt { get; set; }
     public string? CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Una linea del historial de un formulario. Ver Models.FormActivity.</summary>
+public class FormActivityRow
+{
+    public string Id { get; set; } = string.Empty;
+    public string FormId { get; set; } = string.Empty;
+
+    /// <summary>Sin clave foranea: si se borra el usuario, la linea se queda.</summary>
+    public string? UserId { get; set; }
+
+    public string Action { get; set; } = string.Empty;
+    public string Detail { get; set; } = string.Empty;
+    public int Count { get; set; } = 1;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Plantilla guardada por un usuario. El contenido (preguntas, portada, campos)
+/// va entero en <see cref="Content"/> como JSON de Models.Template: se lee y se
+/// escribe siempre de una vez, y asi no hacen falta cuatro tablas mas.
+/// </summary>
+public class UserTemplateRow
+{
+    public string Id { get; set; } = string.Empty;
+    public string? OwnerId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
 }

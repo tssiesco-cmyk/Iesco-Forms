@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import styled from "styled-components";
-import { FiLink, FiCopy, FiTrash2, FiClock, FiCheck, FiPlus } from "react-icons/fi";
+import QRCode from "qrcode";
+import { FiLink, FiCopy, FiTrash2, FiClock, FiCheck, FiPlus, FiDownload, FiX } from "react-icons/fi";
+import { MdQrCode2 } from "react-icons/md";
 import Spinner from "../../atoms/Spinner";
 import { useToast } from "../../../context/ToastContext";
 import { linksApi, linkUrl } from "../../../services/api";
@@ -156,6 +159,131 @@ const Actions = styled.div`
   gap: 4px;
 `;
 
+const QrOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: ${({ theme }) => theme.colors.overlay};
+`;
+
+const QrCard = styled.div`
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  padding: 20px;
+  border-radius: ${({ theme }) => theme.radii.lg};
+  background: ${({ theme }) => theme.colors.surface};
+  box-shadow: ${({ theme }) => theme.shadows.modal};
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+`;
+
+const QrTitle = styled.h3`
+  margin: 0;
+  font-size: ${({ theme }) => theme.fontSizes.md};
+  font-weight: ${({ theme }) => theme.fontWeights.semibold};
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+/* Blanco siempre, tambien en tema oscuro: un QR claro sobre oscuro no lo leen todos los moviles. */
+const QrImageBox = styled.div`
+  width: 256px;
+  height: 256px;
+  padding: 8px;
+  border-radius: ${({ theme }) => theme.radii.md};
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  img { width: 100%; height: 100%; image-rendering: pixelated; }
+`;
+
+const QrClose = styled.button`
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.textMuted};
+  display: inline-flex;
+
+  &:hover { color: ${({ theme }) => theme.colors.text}; }
+`;
+
+/** Nombre de archivo sin caracteres raros: "qr-encuesta-de-satisfaccion.png". */
+function qrFileName(title, token) {
+  const base = (title || token)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return `qr-${base || token}.png`;
+}
+
+/**
+ * Codigo QR de un enlace, para imprimirlo o proyectarlo. Se genera en el
+ * navegador: la direccion no sale a ningun servicio externo.
+ */
+function QrModal({ link, formTitle, onClose }) {
+  const url = linkUrl(link.token);
+  const [dataUrl, setDataUrl] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    // 1024 px para que al imprimirlo en grande siga nitido.
+    QRCode.toDataURL(url, { width: 1024, margin: 2, errorCorrectionLevel: "M" })
+      .then((result) => { if (alive) setDataUrl(result); })
+      .catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; };
+  }, [url]);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const download = () => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = qrFileName(formTitle, link.token);
+    a.click();
+  };
+
+  return createPortal(
+    <QrOverlay onClick={onClose}>
+      <QrCard role="dialog" aria-modal="true" aria-label="Codigo QR del enlace" onClick={(e) => e.stopPropagation()}>
+        <QrClose type="button" onClick={onClose} aria-label="Cerrar"><FiX size={16} /></QrClose>
+        <QrTitle>Codigo QR</QrTitle>
+        <QrImageBox>
+          {dataUrl ? <img src={dataUrl} alt={`Codigo QR de ${url}`} /> : failed ? null : <Spinner $size={20} />}
+        </QrImageBox>
+        {failed && <Hint $tone="warning">No se pudo generar el codigo QR.</Hint>}
+        <Hint>
+          Vence el {formatDate(link.expiresAt)}. Despues el QR deja de abrir el formulario,
+          salvo que le cambies la hora al enlace.
+        </Hint>
+        <SmallButton type="button" $primary disabled={!dataUrl} onClick={download}>
+          <FiDownload size={11} /> Descargar PNG
+        </SmallButton>
+      </QrCard>
+    </QrOverlay>,
+    document.body
+  );
+}
+
 /** "2026-09-16T14:30" en hora local, el formato de <input type="datetime-local">. */
 function toLocalInput(date) {
   const d = new Date(date);
@@ -198,7 +326,7 @@ export async function copy(text) {
  * un enlace solo cae ese enlace: el formulario sigue abierto y se puede crear
  * otro, o cambiarle la hora para volver a abrirlo.
  */
-function FormLinksPanel({ formId, isPublished }) {
+function FormLinksPanel({ formId, isPublished, formTitle }) {
   const toast = useToast();
 
   const [links, setLinks] = useState([]);
@@ -211,6 +339,8 @@ function FormLinksPanel({ formId, isPublished }) {
   const [editValue, setEditValue] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
+  const [qrLink, setQrLink] = useState(null);
+  const closeQr = useCallback(() => setQrLink(null), []);
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async (signal) => {
@@ -403,6 +533,14 @@ function FormLinksPanel({ formId, isPublished }) {
                     <SmallButton type="button" disabled={expired} onClick={() => handleCopy(link)}>
                       {copiedId === link.id ? <FiCheck size={11} /> : <FiCopy size={11} />} Copiar
                     </SmallButton>
+                    <SmallButton
+                      type="button"
+                      disabled={expired}
+                      onClick={() => setQrLink(link)}
+                      title="Codigo QR para imprimir o proyectar"
+                    >
+                      <MdQrCode2 size={12} /> QR
+                    </SmallButton>
                     <SmallButton type="button" disabled={busy} onClick={() => startEdit(link)}>
                       <FiClock size={11} /> {expired ? "Reabrir" : "Cambiar hora"}
                     </SmallButton>
@@ -423,6 +561,8 @@ function FormLinksPanel({ formId, isPublished }) {
           })}
         </LinkList>
       )}
+
+      {qrLink && <QrModal link={qrLink} formTitle={formTitle} onClose={closeQr} />}
     </Section>
   );
 }

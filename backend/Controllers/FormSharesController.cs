@@ -24,6 +24,7 @@ public class FormSharesController(
     IFormShareStore shares,
     IUserStore users,
     INotificationStore notifications,
+    FormNotifier notifier,
     FormAccess access,
     ILogger<FormSharesController> logger) : ControllerBase
 {
@@ -55,7 +56,13 @@ public class FormSharesController(
         // Compartir dos veces con la misma persona no duplica ni vuelve a avisar.
         if (shares.Add(formId, userId, access.CurrentUserId))
         {
-            notifications.Record(userId, NotificationType.FormShared, form.Id, form.Title);
+            notifications.Record(userId, NotificationType.FormShared, form.Id, form.Title, access.CurrentUserId);
+
+            // Al recien llegado le toca "compartido contigo"; a los que ya
+            // estaban, que el formulario cambio de manos compartidas.
+            notifier.Notify(form, NotificationType.FormUpdated, except: userId, log: false);
+            notifier.Log(form, NotificationType.FormShared, target.DisplayName);
+
             logger.LogInformation("{UserId} compartio {FormId} con {TargetId}.", access.CurrentUserId, formId, userId);
         }
 
@@ -71,8 +78,25 @@ public class FormSharesController(
         var leavingMyself = userId == access.CurrentUserId;
         if (!leavingMyself && access.LevelFor(form) != FormAccessLevel.Owner) return FormNotFound(formId);
 
+        // Los destinatarios se miran antes de quitar el compartido: despues, esa
+        // persona ya no sale en la lista y no habria a quien avisar.
+        var destinatarios = notifier.Recipients(form);
+        var nombre = shares.GetDisplayNames([userId]).GetValueOrDefault(userId) ?? string.Empty;
+
         if (!shares.Remove(formId, userId))
             return Problem("Ese formulario no estaba compartido con ese usuario.", statusCode: StatusCodes.Status404NotFound);
+
+        // A quien pierde el acceso se le avisa de lo suyo; a los que se quedan,
+        // del cambio en el formulario.
+        notifications.Record(userId, NotificationType.FormUnshared, form.Id, form.Title, access.CurrentUserId);
+
+        foreach (var destinatario in destinatarios)
+        {
+            if (destinatario == userId) continue;
+            notifications.Record(destinatario, NotificationType.FormUpdated, form.Id, form.Title, access.CurrentUserId);
+        }
+
+        notifier.Log(form, NotificationType.FormUnshared, nombre);
 
         return NoContent();
     }
@@ -90,7 +114,12 @@ public class FormSharesController(
         logger.LogInformation("{UserId} marco {FormId} como {Visibilidad}.",
             access.CurrentUserId, formId, request.IsPublic ? "publico" : "privado");
 
-        return Ok(access.WithAccess(store.GetForm(formId)!));
+        var form = store.GetForm(formId)!;
+        notifier.Notify(form, request.IsPublic
+            ? NotificationType.FormPublic
+            : NotificationType.FormPrivate);
+
+        return Ok(access.WithAccess(form));
     }
 
     private Form? OwnedForm(string formId)

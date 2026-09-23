@@ -96,7 +96,7 @@ const ChevronWrapper = styled.span`
   }
 `;
 
-function UserProfile({ name, role, email, initial, onLogout }) {
+function UserProfile({ name, role, email, initial, avatarUrl, onLogout }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -120,7 +120,7 @@ function UserProfile({ name, role, email, initial, onLogout }) {
         </Menu>
       )}
       <Wrapper onClick={() => onLogout && setOpen((v) => !v)}>
-        <Avatar $size={32}>{initial}</Avatar>
+        <Avatar $size={32} $src={avatarUrl}>{initial}</Avatar>
         <Info>
           <strong>{name}</strong>
           <span>{role}</span>

@@ -30,6 +30,8 @@ DROP TABLE IF EXISTS dbo.ResponseAnswerOptions;
 DROP TABLE IF EXISTS dbo.ResponseAnswers;
 DROP TABLE IF EXISTS dbo.ResponseRespondentValues;
 DROP TABLE IF EXISTS dbo.Responses;
+DROP TABLE IF EXISTS dbo.UserTemplates;
+DROP TABLE IF EXISTS dbo.FormActivity;
 DROP TABLE IF EXISTS dbo.FormLinks;
 DROP TABLE IF EXISTS dbo.FormShares;
 DROP TABLE IF EXISTS dbo.Notifications;
@@ -59,6 +61,10 @@ CREATE TABLE dbo.Users
     -- Cuando el usuario pulso "Olvide mi contrasena". NULL = no hay solicitud
     -- pendiente. Se limpia al ponerle una contrasena nueva.
     PasswordResetRequestedAt DATETIMEOFFSET NULL,
+
+    -- Ruta publica de la foto de perfil ('/uploads/avatars/xxx.png'). Vacia es
+    -- "sin foto": la interfaz pinta entonces las iniciales del nombre.
+    AvatarUrl     NVARCHAR(400)   NOT NULL CONSTRAINT DF_Users_AvatarUrl DEFAULT '',
 
     CONSTRAINT CK_Users_Role CHECK (Role IN ('Administrador', 'Editor'))
 );
@@ -107,9 +113,18 @@ CREATE TABLE dbo.Forms
     -- Solo se lista mientras esta publicado.
     IsPublic              BIT            NOT NULL CONSTRAINT DF_Forms_IsPublic DEFAULT 0,
 
+    -- Deja de aceptar respuestas en esta fecha o al llegar a este numero.
+    -- NULL = sin limite.
+    ClosesAt              DATETIMEOFFSET NULL,
+    MaxResponses          INT            NULL,
+
+    -- Lo que ve quien termina de responder. Vacio = el mensaje de siempre.
+    ConfirmationMessage   NVARCHAR(1000) NOT NULL CONSTRAINT DF_Forms_ConfirmationMessage DEFAULT '',
+
     RowVersion            ROWVERSION     NOT NULL,
 
     CONSTRAINT CK_Forms_Status CHECK (Status IN ('Borrador', 'Activo')),
+    CONSTRAINT CK_Forms_MaxResponses CHECK (MaxResponses IS NULL OR MaxResponses > 0),
     CONSTRAINT FK_Forms_Owner  FOREIGN KEY (OwnerId) REFERENCES dbo.Users (Id) ON DELETE SET NULL
 );
 GO
@@ -274,11 +289,20 @@ CREATE TABLE dbo.Notifications
     Id        VARCHAR(36)    NOT NULL CONSTRAINT PK_Notifications PRIMARY KEY,
     UserId    VARCHAR(36)    NOT NULL,
     Type      NVARCHAR(30)   NOT NULL,
-    FormId    VARCHAR(36)    NOT NULL,
 
-    -- Se guarda el titulo del momento: si el formulario se renombra, el aviso
-    -- sigue diciendo lo que el usuario vio entonces.
-    FormTitle NVARCHAR(500)  NOT NULL CONSTRAINT DF_Notifications_FormTitle DEFAULT '',
+    -- NULL en los avisos que no hablan de un formulario: los de la cuenta y los
+    -- de usuarios, y tambien el de "borrado definitivo", cuyo formulario ya no
+    -- existe cuando se registra el aviso.
+    FormId    VARCHAR(36)    NULL,
+
+    -- De que trata: el titulo del formulario, o el nombre de la persona en los
+    -- avisos de usuarios. Se guarda el texto del momento: si el formulario se
+    -- renombra, el aviso sigue diciendo lo que el usuario vio entonces.
+    [Subject] NVARCHAR(500)  NOT NULL CONSTRAINT DF_Notifications_Subject DEFAULT '',
+
+    -- Quien lo hizo. NULL si fue alguien sin sesion (respuesta por enlace).
+    -- Sin clave foranea: si se borra al usuario, el aviso se queda.
+    ActorId   VARCHAR(36)    NULL,
 
     -- Cuantos eventos iguales se agruparon en este aviso.
     [Count]   INT            NOT NULL CONSTRAINT DF_Notifications_Count     DEFAULT 1,
@@ -288,8 +312,16 @@ CREATE TABLE dbo.Notifications
     ReadAt    DATETIMEOFFSET NULL,
 
     CONSTRAINT CK_Notifications_Type CHECK (Type IN (
-        'new_responses', 'form_published', 'form_unpublished',
-        'form_updated', 'form_trashed', 'form_restored', 'form_shared')),
+        -- Sobre un formulario
+        'new_responses', 'form_created', 'form_published', 'form_unpublished',
+        'form_updated', 'form_trashed', 'form_restored', 'form_deleted',
+        'form_shared', 'form_unshared', 'form_public', 'form_private', 'form_link',
+        -- Sobre la cuenta
+        'account_updated', 'password_changed', 'password_reset',
+        'password_request_dismissed',
+        -- Gestion de usuarios
+        'user_created', 'user_role_changed', 'user_activated', 'user_deactivated',
+        'password_requested')),
     CONSTRAINT FK_Notifications_User FOREIGN KEY (UserId) REFERENCES dbo.Users (Id) ON DELETE CASCADE,
 
     -- Sin cascada a proposito. Con ella habria dos caminos de borrado desde
@@ -365,6 +397,54 @@ GO
 
 CREATE UNIQUE INDEX UX_FormLinks_Token ON dbo.FormLinks (Token);
 CREATE INDEX IX_FormLinks_Form ON dbo.FormLinks (FormId);
+GO
+
+/* ===========================================================================
+   HISTORIAL DE CADA FORMULARIO
+   =========================================================================== */
+CREATE TABLE dbo.FormActivity
+(
+    Id        VARCHAR(36)    NOT NULL CONSTRAINT PK_FormActivity PRIMARY KEY,
+    FormId    VARCHAR(36)    NOT NULL,
+
+    -- Quien lo hizo. NULL si fue alguien sin sesion. Sin clave foranea: si se
+    -- borra el usuario, lo que hizo sigue en el historial.
+    UserId    VARCHAR(36)    NULL,
+
+    Action    VARCHAR(40)    NOT NULL,
+    Detail    NVARCHAR(500)  NOT NULL CONSTRAINT DF_FormActivity_Detail DEFAULT '',
+
+    -- Veces seguidas que la misma persona hizo lo mismo.
+    [Count]   INT            NOT NULL CONSTRAINT DF_FormActivity_Count  DEFAULT 1,
+    CreatedAt DATETIMEOFFSET NOT NULL CONSTRAINT DF_FormActivity_CreatedAt DEFAULT SYSDATETIMEOFFSET(),
+    UpdatedAt DATETIMEOFFSET NOT NULL CONSTRAINT DF_FormActivity_UpdatedAt DEFAULT SYSDATETIMEOFFSET(),
+
+    -- Sin cascada, como FormLinks: el borrado definitivo la limpia a mano.
+    CONSTRAINT FK_FormActivity_Form FOREIGN KEY (FormId) REFERENCES dbo.Forms (Id)
+);
+GO
+
+CREATE INDEX IX_FormActivity_Form ON dbo.FormActivity (FormId, UpdatedAt DESC);
+GO
+
+/* ===========================================================================
+   PLANTILLAS GUARDADAS POR LOS USUARIOS
+   Las del catalogo viven en el codigo (Services/SeedData.cs).
+   =========================================================================== */
+CREATE TABLE dbo.UserTemplates
+(
+    Id          VARCHAR(36)    NOT NULL CONSTRAINT PK_UserTemplates PRIMARY KEY,
+
+    -- Sin clave foranea: si se borra al autor, la plantilla sigue siendo util.
+    OwnerId     VARCHAR(36)    NULL,
+
+    Name        NVARCHAR(200)  NOT NULL,
+    Description NVARCHAR(1000) NOT NULL CONSTRAINT DF_UserTemplates_Description DEFAULT '',
+
+    -- JSON de Models.Template: preguntas, portada, campos y mensaje final.
+    Content     NVARCHAR(MAX)  NOT NULL,
+    CreatedAt   DATETIMEOFFSET NOT NULL CONSTRAINT DF_UserTemplates_CreatedAt DEFAULT SYSDATETIMEOFFSET()
+);
 GO
 
 /* ===========================================================================

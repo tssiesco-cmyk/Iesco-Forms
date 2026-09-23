@@ -503,6 +503,32 @@ const REMOTE_ERRORS = {
   },
 };
 
+/** Texto para un envio que fallo. */
+function submitErrorText(err) {
+  if (err.isNetwork) {
+    return "No se pudo enviar: sin conexion con el servidor. Tus respuestas siguen aqui, vuelve a intentarlo.";
+  }
+  if (err.status === 429) return "Demasiados envios seguidos. Espera un momento y vuelve a intentarlo.";
+  return err.message;
+}
+
+/**
+ * Por que un formulario publicado ya no acepta respuestas. La fecha manda
+ * sobre el cupo: si pasaron las dos, lo primero que se ve es cuando cerro.
+ */
+function closedReason(form) {
+  if (form.closesAt && new Date(form.closesAt).getTime() <= Date.now()) {
+    const when = new Date(form.closesAt).toLocaleString("es-ES", {
+      day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+    return `Se cerro el ${when}.`;
+  }
+  if (form.maxResponses && (form.responseCount ?? 0) >= form.maxResponses) {
+    return `Se alcanzo el limite de ${form.maxResponses} respuestas.`;
+  }
+  return "Ya no se aceptan mas respuestas.";
+}
+
 function remoteStatusFor(err, viaLink) {
   if (err.status === 410) return "expired";
   if (err.status === 409) return "closed";
@@ -608,6 +634,10 @@ function FormView() {
   const [animKey, setAnimKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  // El servidor puede decir que cerro justo al enviar (410): guarda su mensaje.
+  const [closedMessage, setClosedMessage] = useState(null);
+  // Quien puede editarlo puede querer revisar un formulario ya cerrado.
+  const [previewClosed, setPreviewClosed] = useState(false);
 
   if (!form && (remote.status === "idle" || remote.status === "loading")) {
     return (
@@ -651,6 +681,29 @@ function FormView() {
     );
   }
 
+  // Publicado pero cerrado por fecha o por cupo: se avisa antes de llenar nada,
+  // no al final. Un borrador sigue su camino (vista previa del editor).
+  const isClosed = closedMessage !== null || (form.status === "Activo" && form.isClosed);
+
+  if (isClosed && chosenStep !== "submitted" && !(previewClosed && closedMessage === null)) {
+    return (
+      <Page {...backgroundProps}>
+        <ThankYou>
+          <ThankTitle>Este formulario ya no acepta respuestas</ThankTitle>
+          <ThankText>{closedMessage ?? closedReason(form)}</ThankText>
+          <SubmitButton onClick={() => navigate(exitPath)}>
+            {form.access && !token ? "Editar formulario" : "Volver"}
+          </SubmitButton>
+          {form.access && !token && closedMessage === null && (
+            <NavButton style={{ marginTop: 12 }} onClick={() => setPreviewClosed(true)}>
+              Ver de todos modos
+            </NavButton>
+          )}
+        </ThankYou>
+      </Page>
+    );
+  }
+
   if (!hasIntro && !hasQuestions) {
     return (
       <Page {...backgroundProps}>
@@ -688,6 +741,13 @@ function FormView() {
     return respondent;
   };
 
+  // Un 410 al enviar es que cerro mientras se respondia (fecha, cupo o enlace
+  // vencido): no tiene arreglo reintentando, se pasa a la pantalla de cerrado.
+  const handleSubmitError = (err) => {
+    if (err?.status === 410 && !err.isNetwork) setClosedMessage(err.message);
+    else setSubmitError(err);
+  };
+
   const handleStart = async () => {
     if (!canStart || submitting) return;
 
@@ -704,7 +764,7 @@ function FormView() {
     setSubmitting(false);
 
     if (result.ok) setStep("submitted");
-    else setSubmitError(result.error);
+    else handleSubmitError(result.error);
   };
 
   const handleIntroChange = (field, value) => {
@@ -749,7 +809,7 @@ function FormView() {
     setSubmitting(false);
 
     if (result.ok) setStep("submitted");
-    else setSubmitError(result.error);
+    else handleSubmitError(result.error);
   };
 
   const goPrev = () => {
@@ -848,9 +908,7 @@ function FormView() {
               <SubmitError>
                 <FiAlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
                 <span>
-                  {submitError.isNetwork
-                    ? "No se pudo enviar: sin conexion con el servidor. Tus respuestas siguen aqui, vuelve a intentarlo."
-                    : submitError.message}
+                  {submitErrorText(submitError)}
                 </span>
               </SubmitError>
             )}
@@ -877,7 +935,10 @@ function FormView() {
               ? `Gracias, ${respondentName.trim().split(" ")[0]}`
               : "Gracias"}
           </ThankTitle>
-          <ThankText>Tus respuestas han sido registradas correctamente.</ThankText>
+          {/* El mensaje propio del formulario manda; vacio, el de siempre. */}
+          <ThankText style={{ whiteSpace: "pre-line" }}>
+            {form.confirmationMessage?.trim() || "Tus respuestas han sido registradas correctamente."}
+          </ThankText>
           <SubmitButton onClick={() => navigate(exitPath)}>
             Volver
           </SubmitButton>
@@ -982,9 +1043,7 @@ function FormView() {
             <SubmitError>
               <FiAlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
               <span>
-                {submitError.isNetwork
-                  ? "No se pudo enviar: sin conexion con el servidor. Tus respuestas siguen aqui, vuelve a intentarlo."
-                  : submitError.message}
+                {submitErrorText(submitError)}
               </span>
             </SubmitError>
           )}

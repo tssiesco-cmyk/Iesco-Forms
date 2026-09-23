@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { FiUser, FiMail, FiShield, FiLock, FiLogOut } from "react-icons/fi";
+import { useRef, useState } from "react";
+import { FiUser, FiMail, FiShield, FiLock, FiLogOut, FiUpload } from "react-icons/fi";
 import Avatar from "../../components/atoms/Avatar";
 import Button from "../../components/atoms/Button";
 import Spinner from "../../components/atoms/Spinner";
@@ -19,6 +19,91 @@ function initialsOf(name = "") {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0][0].toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/**
+ * Foto de perfil. Quien no sube ninguna se sigue viendo con sus iniciales, que
+ * es lo que habia antes: la foto es un anadido, no un requisito.
+ */
+function AvatarOption() {
+  const { user, updateProfile } = useAuth();
+  const toast = useToast();
+
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+
+  const hasPhoto = Boolean(user?.avatarUrl);
+
+  /** Las dos acciones devuelven el perfil nuevo; el resto es identico. */
+  const run = async (call, message) => {
+    setBusy(true);
+    try {
+      updateProfile(await call());
+      toast.success(message);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickFile = (event) => {
+    const file = event.target.files?.[0];
+
+    // Se limpia siempre: si no, elegir el mismo archivo dos veces seguidas no
+    // vuelve a disparar el evento y parece que la aplicacion no hace nada.
+    event.target.value = "";
+
+    if (!file || busy) return;
+    run(() => accountApi.uploadAvatar(file), "Foto de perfil actualizada.");
+  };
+
+  return (
+    <Option>
+      <OptionInfo>
+        <Avatar $size={36} $src={user?.avatarUrl}>{initialsOf(user?.displayName)}</Avatar>
+        <OptionText>
+          <strong>Foto de perfil</strong>
+          <span>
+            {hasPhoto
+              ? "Se ve en el menu, en el panel y donde compartas formularios."
+              : "Sin foto se muestran tus iniciales. PNG, JPG o WebP, hasta 5 MB."}
+          </span>
+        </OptionText>
+      </OptionInfo>
+
+      <FieldActions>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={pickFile}
+          hidden
+        />
+
+        {hasPhoto && (
+          <Button
+            $variant="ghost"
+            $size="sm"
+            onClick={() => run(accountApi.removeAvatar, "Foto de perfil quitada.")}
+            disabled={busy}
+          >
+            Quitar
+          </Button>
+        )}
+
+        <Button
+          $variant="secondary"
+          $size="sm"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+        >
+          {busy ? <Spinner $size={12} $color="currentColor" /> : <FiUpload size={14} />}
+          {hasPhoto ? "Cambiar" : "Subir foto"}
+        </Button>
+      </FieldActions>
+    </Option>
+  );
 }
 
 /** Nombre editable en la propia fila: no merece un modal. */
@@ -218,7 +303,7 @@ function Account() {
   return (
     <Page>
       <Header>
-        <Avatar $size={56}>{initialsOf(user?.displayName)}</Avatar>
+        <Avatar $size={56} $src={user?.avatarUrl}>{initialsOf(user?.displayName)}</Avatar>
         <HeaderInfo>
           <h1>Mi cuenta</h1>
           <p>Tus datos y tu contrasena.</p>
@@ -227,6 +312,7 @@ function Account() {
 
       <Section>
         <SectionTitle><h2>Perfil</h2></SectionTitle>
+        <AvatarOption />
         <NameOption />
         <Option>
           <OptionInfo>

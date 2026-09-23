@@ -109,31 +109,45 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         return ToModel(fila);
     }
 
-    public Form? CreateFormFromTemplate(string templateId, string ownerId)
+    public Form CreateFormFrom(Template plantilla, string ownerId, string? title = null)
     {
-        // Las plantillas viven en el codigo (SeedData), no en la base: el
-        // formulario nuevo es una copia independiente que si se guarda.
-        var plantilla = SeedData.FindTemplate(templateId);
-
-        if (plantilla is null) return null;
-
+        // El formulario nuevo es una copia independiente: desde aqui se edita
+        // sin afectar a la plantilla ni al formulario del que salio.
         var fila = new FormRow
         {
             Id = NewId(),
-            Title = plantilla.Name,
+            Title = string.IsNullOrWhiteSpace(title) ? plantilla.Name : title.Trim(),
             Description = plantilla.Description,
             Status = FormStatus.Draft,
             OwnerId = string.IsNullOrWhiteSpace(ownerId) ? null : ownerId,
             CreatedAt = DateTimeOffset.UtcNow,
 
-            // Fondo y portada nacen con los de la plantilla; desde aqui son del
-            // formulario y se editan sin afectar a la plantilla ni a los demas.
             BackgroundImage = plantilla.BackgroundImage,
+            BackgroundOverlay = plantilla.BackgroundOverlay,
+            BackgroundPerQuestion = plantilla.BackgroundPerQuestion,
+            IntroBackgroundImage = plantilla.IntroBackgroundImage,
             CoverEnabled = plantilla.CoverEnabled,
             CoverTitle = plantilla.CoverTitle,
             CoverSubtitle = plantilla.CoverSubtitle,
             CoverWelcome = plantilla.CoverWelcome,
+            ConfirmationMessage = plantilla.ConfirmationMessage,
         };
+
+        var posicionCampo = 0;
+        foreach (var campo in plantilla.IntroFields)
+        {
+            fila.IntroFields.Add(new IntroFieldRow
+            {
+                Id = NewId(),
+                FormId = fila.Id,
+                Position = posicionCampo++,
+                Type = campo.Type,
+                Label = campo.Label,
+                Placeholder = campo.Placeholder,
+                Required = campo.Required,
+                Enabled = campo.Enabled,
+            });
+        }
 
         var posicion = 0;
         foreach (var pregunta in plantilla.Questions)
@@ -145,9 +159,10 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 Position = posicion++,
                 Type = pregunta.Type,
                 Title = pregunta.Title,
-                Description = string.Empty,
+                Description = pregunta.Description,
                 Required = pregunta.Required,
-                TextCase = QuestionTextCase.Normal,
+                TextCase = QuestionTextCase.IsValid(pregunta.TextCase) ? pregunta.TextCase : QuestionTextCase.Normal,
+                BackgroundImage = pregunta.BackgroundImage,
             };
 
             var posicionOpcion = 0;
@@ -171,6 +186,45 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         return ToModel(fila);
     }
 
+    public Template? ToTemplate(string formId)
+    {
+        var form = GetForm(formId);
+        if (form is null) return null;
+
+        return new Template
+        {
+            Name = form.Title,
+            Description = form.Description,
+            BackgroundImage = form.BackgroundImage,
+            BackgroundOverlay = form.BackgroundOverlay,
+            BackgroundPerQuestion = form.BackgroundPerQuestion,
+            IntroBackgroundImage = form.IntroBackgroundImage,
+            CoverEnabled = form.CoverEnabled,
+            CoverTitle = form.CoverTitle,
+            CoverSubtitle = form.CoverSubtitle,
+            CoverWelcome = form.CoverWelcome,
+            ConfirmationMessage = form.ConfirmationMessage,
+            IntroFields = [.. form.IntroFields.Select(i => new TemplateIntroField
+            {
+                Type = i.Type,
+                Label = i.Label,
+                Placeholder = i.Placeholder,
+                Required = i.Required,
+                Enabled = i.Enabled,
+            })],
+            Questions = [.. form.Questions.Select(q => new TemplateQuestion
+            {
+                Type = q.Type,
+                Title = q.Title,
+                Description = q.Description,
+                Required = q.Required,
+                TextCase = q.TextCase,
+                BackgroundImage = q.BackgroundImage,
+                Options = [.. q.Options.Select(o => o.Text)],
+            })],
+        };
+    }
+
     public Form? UpdateForm(string id, string? title, string? description, string? status)
     {
         var fila = db.Forms.FirstOrDefault(f => f.Id == id);
@@ -182,6 +236,23 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
 
         db.SaveChanges();
         return GetForm(id);
+    }
+
+    public Form? UpdateSettings(string formId, DateTimeOffset? closesAt, bool clearClosesAt, int? maxResponses, string? confirmationMessage)
+    {
+        var fila = db.Forms.FirstOrDefault(f => f.Id == formId);
+        if (fila is null) return null;
+
+        if (clearClosesAt) fila.ClosesAt = null;
+        else if (closesAt is not null) fila.ClosesAt = closesAt;
+
+        // 0 es "sin limite": el CHECK de la tabla no admite cupos de cero.
+        if (maxResponses is not null) fila.MaxResponses = maxResponses > 0 ? maxResponses : null;
+
+        if (confirmationMessage is not null) fila.ConfirmationMessage = confirmationMessage;
+
+        db.SaveChanges();
+        return GetForm(formId);
     }
 
     // --------------------------------------------------------------- imagenes
@@ -347,7 +418,10 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         db.Questions.IgnoreQueryFilters().Where(q => formIds.Contains(q.FormId)).ExecuteDelete();
         db.IntroFields.IgnoreQueryFilters().Where(i => formIds.Contains(i.FormId)).ExecuteDelete();
 
-        db.Notifications.Where(n => formIds.Contains(n.FormId)).ExecuteDelete();
+        // Solo los avisos del formulario. Los que van sin FormId (cuenta,
+        // usuarios, "borrado definitivo") no dependen de esta fila y se quedan.
+        db.Notifications.Where(n => n.FormId != null && formIds.Contains(n.FormId)).ExecuteDelete();
+        db.FormActivity.Where(a => formIds.Contains(a.FormId)).ExecuteDelete();
         db.FormShares.Where(sh => formIds.Contains(sh.FormId)).ExecuteDelete();
         db.FormLinks.Where(l => formIds.Contains(l.FormId)).ExecuteDelete();
         db.Forms.Where(f => formIds.Contains(f.Id)).ExecuteDelete();
@@ -741,6 +815,27 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         return ToModel(fila, tipos);
     }
 
+    public bool DeleteResponse(string formId, string responseId)
+    {
+        if (!db.Responses.Any(r => r.Id == responseId && r.FormId == formId)) return false;
+
+        // Mismo orden que el borrado del formulario entero: primero las hijas.
+        using var tx = db.Database.BeginTransaction();
+
+        var detalleIds = db.ResponseAnswers
+            .Where(a => a.ResponseId == responseId)
+            .Select(a => a.Id)
+            .ToList();
+
+        db.ResponseAnswerOptions.Where(o => detalleIds.Contains(o.AnswerId)).ExecuteDelete();
+        db.ResponseAnswers.Where(a => a.ResponseId == responseId).ExecuteDelete();
+        db.ResponseRespondentValues.Where(v => v.ResponseId == responseId).ExecuteDelete();
+        db.Responses.Where(r => r.Id == responseId).ExecuteDelete();
+
+        tx.Commit();
+        return true;
+    }
+
     private static string TextoDe(JsonNode valor) =>
         valor.GetValueKind() == JsonValueKind.String ? valor.GetValue<string>() : valor.ToString();
 
@@ -796,6 +891,9 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         CoverSubtitle = fila.CoverSubtitle,
         CoverWelcome = fila.CoverWelcome,
         IsPublic = fila.IsPublic,
+        ClosesAt = fila.ClosesAt,
+        MaxResponses = fila.MaxResponses,
+        ConfirmationMessage = fila.ConfirmationMessage,
         TrashedAt = fila.TrashedAt,
         IntroFields = [.. fila.IntroFields.OrderBy(i => i.Position).Select(ToModel)],
         Questions = [.. fila.Questions.OrderBy(q => q.Position).Select(ToModel)],

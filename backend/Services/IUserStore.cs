@@ -38,14 +38,26 @@ public interface IUserStore
     /// </summary>
     bool SetPassword(string id, string newPassword);
 
+    // --- Foto de perfil ---
+
+    /// <summary>
+    /// Guarda la ruta de la foto (cadena vacia = quitarla) y devuelve la que
+    /// habia antes, para que quien llama borre ese archivo. Null si el usuario
+    /// no existe, que no es lo mismo que una cadena vacia.
+    /// </summary>
+    string? SetAvatar(string id, string avatarUrl);
+
     // --- Olvide mi contrasena ---
 
     /// <summary>
     /// Marca la solicitud si el correo es de un usuario activo; si no, no hace
-    /// nada. No devuelve el resultado a proposito: quien llama no debe poder
-    /// saber si el correo existe.
+    /// nada.
+    ///
+    /// Devuelve el usuario solo si la solicitud es nueva, para avisar a los
+    /// administradores. Es de uso interno: la respuesta HTTP no debe cambiar
+    /// segun esto, o se podria averiguar que correos existen.
     /// </summary>
-    void RequestPasswordReset(string email);
+    UserSummary? RequestPasswordReset(string email);
 
     /// <summary>Descarta la solicitud sin tocar la contrasena. Null si el usuario no existe.</summary>
     UserSummary? DismissPasswordReset(string id);

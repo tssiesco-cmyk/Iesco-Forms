@@ -3,9 +3,12 @@ import { useNavigate } from "react-router-dom";
 import styled, { keyframes } from "styled-components";
 import {
   FiBell, FiMessageSquare, FiCheck, FiAlertTriangle,
-  FiSend, FiRotateCcw, FiEdit3, FiTrash2, FiPlusCircle, FiShare2
+  FiSend, FiRotateCcw, FiEdit3, FiTrash2, FiPlusCircle, FiShare2,
+  FiFilePlus, FiGlobe, FiLock, FiLink, FiXCircle, FiUser, FiUserPlus,
+  FiUserCheck, FiUserX, FiKey, FiShield
 } from "react-icons/fi";
 import { useNotifications } from "../../../context/NotificationsContext";
+import { useAuth } from "../../../context/AuthContext";
 import Spinner from "../../atoms/Spinner";
 
 const Wrapper = styled.div`
@@ -157,11 +160,20 @@ const ItemBody = styled.div`
     margin-top: 2px;
   }
 
-  time {
-    display: block;
-    font-size: ${({ theme }) => theme.fontSizes.xs};
-    color: ${({ theme }) => theme.colors.textMuted};
-    margin-top: 4px;
+`;
+
+/** Quien lo hizo y cuando: "Juan Perez · hace 5 min". */
+const Meta = styled.div`
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.textMuted};
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  b {
+    font-weight: ${({ theme }) => theme.fontWeights.medium};
+    color: ${({ theme }) => theme.colors.textSecondary};
   }
 `;
 
@@ -265,7 +277,99 @@ const TYPES = {
     tone: "success",
     text: () => "Restaurado desde la papelera",
   },
+
+  // --- Resto de lo que pasa en un formulario ---
+  form_created: {
+    icon: <FiFilePlus size={15} />,
+    tone: "success",
+    text: () => "Formulario creado",
+  },
+  form_deleted: {
+    icon: <FiXCircle size={15} />,
+    tone: "danger",
+    text: () => "Eliminado definitivamente",
+  },
+  form_unshared: {
+    icon: <FiUserX size={15} />,
+    tone: "warning",
+    text: () => "Te quitaron el acceso",
+  },
+  form_public: {
+    icon: <FiGlobe size={15} />,
+    tone: "primary",
+    text: () => "Ahora es publico",
+  },
+  form_private: {
+    icon: <FiLock size={15} />,
+    tone: "warning",
+    text: () => "Dejo de ser publico",
+  },
+  form_link: {
+    icon: <FiLink size={15} />,
+    tone: "primary",
+    text: (c) => (c === 1 ? "Enlace para responder actualizado" : `${c} cambios en los enlaces`),
+  },
+
+  // --- Tu cuenta ---
+  account_updated: {
+    icon: <FiUser size={15} />,
+    tone: "primary",
+    text: () => "Perfil actualizado",
+  },
+  password_changed: {
+    icon: <FiKey size={15} />,
+    tone: "warning",
+    text: () => "Contrasena cambiada",
+  },
+  password_reset: {
+    icon: <FiKey size={15} />,
+    tone: "warning",
+    text: () => "Un administrador restablecio la contrasena",
+  },
+  password_request_dismissed: {
+    icon: <FiXCircle size={15} />,
+    tone: "warning",
+    text: () => "Solicitud de contrasena descartada",
+  },
+
+  // --- Gestion de usuarios ---
+  user_created: {
+    icon: <FiUserPlus size={15} />,
+    tone: "success",
+    text: () => "Cuenta creada",
+  },
+  user_role_changed: {
+    icon: <FiShield size={15} />,
+    tone: "primary",
+    text: () => "Rol cambiado",
+  },
+  user_activated: {
+    icon: <FiUserCheck size={15} />,
+    tone: "success",
+    text: () => "Cuenta activada",
+  },
+  user_deactivated: {
+    icon: <FiUserX size={15} />,
+    tone: "danger",
+    text: () => "Cuenta desactivada",
+  },
+  password_requested: {
+    icon: <FiKey size={15} />,
+    tone: "warning",
+    text: () => "Pidio restablecer su contrasena",
+  },
 };
+
+/**
+  * Los avisos que no hablan de un formulario: los de la cuenta y los de
+  * usuarios. Llevan el nombre de la persona como asunto y no llevan a un
+  * formulario, porque no hay ninguno al que ir.
+  */
+const ACCOUNT_TYPES = new Set([
+  "account_updated", "password_changed", "password_reset",
+  "password_request_dismissed", "user_created", "user_role_changed",
+  "user_activated", "user_deactivated", "password_requested",
+]);
 
 const FALLBACK = { icon: <FiBell size={15} />, tone: "primary", text: () => "Actividad" };
 
@@ -274,9 +378,26 @@ function describe(notification) {
   return type.text(notification.count);
 }
 
+/**
+ * Quien lo hizo, para mostrarlo junto a la hora. Null si no hay nada util que
+ * decir: avisos antiguos sin autor, o cuando el autor es justo el asunto
+ * ("Juan pidio restablecer su contrasena · Juan" sobra).
+ */
+function actorLabel(notification, currentUserId) {
+  let label = null;
+
+  if (notification.actorId && notification.actorId === currentUserId) label = "Tu";
+  else if (notification.actorName) label = notification.actorName;
+  else if (!notification.actorId && notification.type === "new_responses") label = "Alguien con el enlace";
+
+  if (label && label !== "Tu" && label === notification.subject) return null;
+  return label;
+}
+
 function NotificationsMenu() {
   const navigate = useNavigate();
   const { items, unreadCount, status, error, loadList, markRead, markAllRead } = useNotifications();
+  const { user } = useAuth();
 
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -308,11 +429,27 @@ function NotificationsMenu() {
   const handleOpen = (notification) => {
     setOpen(false);
     markRead(notification.id);
-    // Una notificacion que no lleva a ningun sitio es decoracion. Lo que te
-    // compartieron lleva a Compartidos: ahi se ve de quien es y que permiso tienes.
-    navigate(notification.type === "form_shared"
-      ? "/compartidos"
-      : `/formularios/${notification.formId}/resultados`);
+    // Una notificacion que no lleva a ningun sitio es decoracion, asi que cada
+    // una va a donde se ve lo que anuncia. Lo que te compartieron lleva a
+    // Compartidos: ahi se ve de quien es y que permiso tienes. Los de cuenta y
+    // usuarios van a sus pantallas, y un formulario ya borrado no lleva a
+    // ninguna parte: no queda nada que abrir.
+    if (ACCOUNT_TYPES.has(notification.type)) {
+      // La solicitud de contrasena se atiende en Usuarios, igual que los user_*.
+      const isAdminView =
+        notification.type.startsWith("user_") || notification.type === "password_requested";
+      navigate(isAdminView ? "/configuracion" : "/mi-cuenta");
+      return;
+    }
+
+    if (notification.type === "form_shared" || notification.type === "form_unshared") {
+      navigate("/compartidos");
+      return;
+    }
+
+    if (!notification.formId) return;
+
+    navigate(`/formularios/${notification.formId}/resultados`);
   };
 
   return (
@@ -360,7 +497,7 @@ function NotificationsMenu() {
             <Centered>
               <EmptyIcon><FiBell size={20} /></EmptyIcon>
               <strong>Todo al dia</strong>
-              <p>Aqui veras la actividad de tus formularios: respuestas, cambios y publicaciones.</p>
+              <p>Aqui veras la actividad: respuestas, cambios en tus formularios y en tu cuenta.</p>
             </Centered>
           )}
 
@@ -368,6 +505,7 @@ function NotificationsMenu() {
             <List>
               {items.map((notification) => {
                 const unread = !notification.readAt;
+                const actor = actorLabel(notification, user?.id);
                 return (
                   <Item
                     key={notification.id}
@@ -380,10 +518,13 @@ function NotificationsMenu() {
                     </ItemIcon>
                     <ItemBody>
                       <strong>{describe(notification)}</strong>
-                      <span>{notification.formTitle}</span>
-                      <time dateTime={notification.updatedAt}>
-                        {relativeTime(notification.updatedAt)}
-                      </time>
+                      <span>{notification.subject}</span>
+                      <Meta>
+                        {actor && <><b>{actor}</b> · </>}
+                        <time dateTime={notification.updatedAt}>
+                          {relativeTime(notification.updatedAt)}
+                        </time>
+                      </Meta>
                     </ItemBody>
                     {unread && <UnreadDot />}
                   </Item>

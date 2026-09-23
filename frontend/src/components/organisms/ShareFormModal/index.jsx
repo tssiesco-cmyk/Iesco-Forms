@@ -205,7 +205,8 @@ const Suggestions = styled.ul`
 
 const Suggestion = styled.li`
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   padding: 8px 10px;
   border-radius: ${({ theme }) => theme.radii.sm};
   cursor: pointer;
@@ -213,6 +214,13 @@ const Suggestion = styled.li`
 
   strong { font-size: ${({ theme }) => theme.fontSizes.base}; font-weight: ${({ theme }) => theme.fontWeights.medium}; }
   span { font-size: ${({ theme }) => theme.fontSizes.sm}; color: ${({ theme }) => theme.colors.textMuted}; }
+`;
+
+/** El nombre y el correo, en columna, al lado de la foto. */
+const SuggestionText = styled.div`
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 `;
 
 const NoMatch = styled.li`
@@ -558,8 +566,13 @@ function ShareFormModal({ form, onClose }) {
                               onMouseDown={(e) => { e.preventDefault(); pick(c); }}
                               onMouseMove={() => setActiveIndex(i)}
                             >
-                              <strong>{c.displayName}</strong>
-                              <span>{c.email}</span>
+                              <Avatar $size={28} $src={c.avatarUrl}>
+                                {initialsOf(c.displayName)}
+                              </Avatar>
+                              <SuggestionText>
+                                <strong>{c.displayName}</strong>
+                                <span>{c.email}</span>
+                              </SuggestionText>
                             </Suggestion>
                           ))
                         )}
@@ -581,7 +594,9 @@ function ShareFormModal({ form, onClose }) {
                   <People>
                     {shares.map((share) => (
                       <Person key={share.userId}>
-                        <Avatar $size={32}>{initialsOf(share.displayName)}</Avatar>
+                        <Avatar $size={32} $src={share.avatarUrl}>
+                          {initialsOf(share.displayName)}
+                        </Avatar>
                         <PersonInfo>
                           <strong>{share.displayName}</strong>
                           <span>{share.email}</span>

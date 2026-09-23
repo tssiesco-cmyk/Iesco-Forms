@@ -20,13 +20,27 @@ public class SqlNotificationStore(IescoFormsDbContext db) : INotificationStore
     {
         if (string.IsNullOrEmpty(userId)) return [];
 
-        return [.. db.Notifications
+        var filas = db.Notifications
             .AsNoTracking()
             .Where(n => n.UserId == userId)
             .OrderByDescending(n => n.UpdatedAt)
             .Take(limit)
-            .ToList()
-            .Select(ToModel)];
+            .ToList();
+
+        // El nombre se busca al leer y no se guarda en el aviso: si alguien
+        // cambia su nombre, sus avisos lo muestran ya cambiado.
+        var actorIds = filas.Where(n => n.ActorId != null).Select(n => n.ActorId!).Distinct().ToList();
+        var nombres = db.Users
+            .AsNoTracking()
+            .Where(u => actorIds.Contains(u.Id))
+            .ToDictionary(u => u.Id, u => u.DisplayName);
+
+        return [.. filas.Select(fila =>
+        {
+            var aviso = ToModel(fila);
+            aviso.ActorName = fila.ActorId is null ? null : nombres.GetValueOrDefault(fila.ActorId);
+            return aviso;
+        })];
     }
 
     public int CountUnread(string userId)
@@ -58,26 +72,43 @@ public class SqlNotificationStore(IescoFormsDbContext db) : INotificationStore
             .ExecuteUpdate(s => s.SetProperty(n => n.ReadAt, DateTimeOffset.UtcNow));
     }
 
-    public void Record(string userId, string type, string formId, string formTitle)
+    public void Record(string userId, string type, string? formId, string subject, string? actorId)
     {
-        if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(formId)) return;
+        if (string.IsNullOrEmpty(userId)) return;
+
+        // Cadena vacia y null son lo mismo aqui: "este aviso no va de un
+        // formulario". La columna admite null, que es lo que entiende la clave
+        // foranea; una cadena vacia la romperia.
+        if (string.IsNullOrEmpty(formId)) formId = null;
+        if (string.IsNullOrEmpty(actorId)) actorId = null;
 
         // El aviso referencia al formulario con clave foranea: si ya no existe,
-        // no hay nada que anunciar.
-        if (!db.Forms.Any(f => f.Id == formId)) return;
+        // no hay nada que anunciar. Los que van sin formulario se saltan esto.
+        if (formId is not null && !db.Forms.Any(f => f.Id == formId)) return;
 
         var ahora = DateTimeOffset.UtcNow;
 
-        var existente = db.Notifications.FirstOrDefault(n =>
-            n.UserId == userId && n.FormId == formId && n.Type == type && n.ReadAt == null);
+        // Se agrupa tambien por autor, para que cada aviso tenga un solo nombre.
+        // Los que no llevan formulario se agrupan ademas por asunto: sin el
+        // asunto, crear los usuarios A y B dejaria un solo aviso que dice "B",
+        // y borrar varios formularios, uno solo con el titulo del ultimo.
+        // Comparar FormId == null en LINQ se traduce a "IS NULL", pero
+        // escribirlo aparte lo deja claro.
+        var existente = formId is null
+            ? db.Notifications.FirstOrDefault(n =>
+                n.UserId == userId && n.FormId == null && n.Type == type &&
+                n.ActorId == actorId && n.Subject == subject && n.ReadAt == null)
+            : db.Notifications.FirstOrDefault(n =>
+                n.UserId == userId && n.FormId == formId && n.Type == type &&
+                n.ActorId == actorId && n.ReadAt == null);
 
         if (existente is not null)
         {
             existente.Count++;
             existente.UpdatedAt = ahora;
-            // Se refresca el titulo: si lo renombraron, el aviso sin leer que la
+            // Se refresca el texto: si lo renombraron, el aviso sin leer que la
             // persona todavia no vio debe mostrar el nombre actual.
-            existente.FormTitle = formTitle;
+            existente.Subject = subject;
         }
         else
         {
@@ -87,7 +118,8 @@ public class SqlNotificationStore(IescoFormsDbContext db) : INotificationStore
                 UserId = userId,
                 Type = type,
                 FormId = formId,
-                FormTitle = formTitle,
+                Subject = subject,
+                ActorId = actorId,
                 Count = 1,
                 CreatedAt = ahora,
                 UpdatedAt = ahora,
@@ -105,7 +137,9 @@ public class SqlNotificationStore(IescoFormsDbContext db) : INotificationStore
         // Normalmente ya no queda ninguno: al borrar un formulario de verdad,
         // SqlFormStore limpia sus avisos en la misma transaccion porque la clave
         // foranea se lo exige. Esto queda como red por si llega por otro camino.
-        db.Notifications.Where(n => ids.Contains(n.FormId)).ExecuteDelete();
+        // Los avisos sin formulario (cuenta, usuarios, borrado definitivo) no
+        // los toca: no pertenecen a ningun formulario que se este borrando.
+        db.Notifications.Where(n => n.FormId != null && ids.Contains(n.FormId)).ExecuteDelete();
     }
 
     private static Notification ToModel(NotificationRow fila) => new()
@@ -114,7 +148,8 @@ public class SqlNotificationStore(IescoFormsDbContext db) : INotificationStore
         UserId = fila.UserId,
         Type = fila.Type,
         FormId = fila.FormId,
-        FormTitle = fila.FormTitle,
+        Subject = fila.Subject,
+        ActorId = fila.ActorId,
         Count = fila.Count,
         CreatedAt = fila.CreatedAt,
         UpdatedAt = fila.UpdatedAt,

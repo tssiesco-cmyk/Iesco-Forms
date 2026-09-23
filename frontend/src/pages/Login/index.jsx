@@ -410,7 +410,13 @@ function Login() {
               <span>
                 {error.isNetwork
                   ? "No se pudo conectar con el servidor. Comprueba que el backend este corriendo."
-                  : error.message}
+                  : error.status === 429
+                    // El bloqueo por cuenta trae su mensaje con los minutos que
+                    // faltan; el limite por IP responde sin cuerpo ("Error 429").
+                    ? (error.message && !error.message.startsWith("Error ")
+                      ? error.message
+                      : "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.")
+                    : error.message}
               </span>
             </Alert>
           )}

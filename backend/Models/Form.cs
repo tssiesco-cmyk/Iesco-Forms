@@ -133,6 +133,28 @@ public class Form
     /// </summary>
     public bool IsPublic { get; set; }
 
+    /// <summary>
+    /// Desde cuando deja de aceptar respuestas, aunque siga publicado. Null: no
+    /// cierra solo. A diferencia de los enlaces, vale para todos, tambien para
+    /// quien responde con sesion.
+    /// </summary>
+    public DateTimeOffset? ClosesAt { get; set; }
+
+    /// <summary>Maximo de respuestas. Null: sin limite.</summary>
+    public int? MaxResponses { get; set; }
+
+    /// <summary>Mensaje al terminar de responder. Vacio: el de siempre.</summary>
+    public string ConfirmationMessage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Si ya no acepta respuestas por fecha o por cupo. Se calcula al leer, para
+    /// que quien abre el formulario lo sepa antes de llenarlo y no al enviar.
+    /// No mira el estado: un borrador tiene su propio mensaje.
+    /// </summary>
+    public bool IsClosed =>
+        (ClosesAt is not null && ClosesAt <= DateTimeOffset.UtcNow) ||
+        (MaxResponses is not null && ResponseCount >= MaxResponses);
+
     /// <summary>Datos que se piden antes de empezar a responder. Puede ir vacio.</summary>
     public List<IntroField> IntroFields { get; set; } = [];
 
@@ -165,6 +187,7 @@ public record FormShare(
     string UserId,
     string Email,
     string DisplayName,
+    string AvatarUrl,
     string Permission,
     DateTimeOffset SharedAt);
 

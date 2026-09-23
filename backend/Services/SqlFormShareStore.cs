@@ -24,7 +24,7 @@ public class SqlFormShareStore(IescoFormsDbContext db) : IFormShareStore
          join u in db.Users.AsNoTracking() on s.UserId equals u.Id
          where s.FormId == formId
          orderby u.DisplayName
-         select new FormShare(u.Id, u.Email, u.DisplayName, s.Permission, s.SharedAt))
+         select new FormShare(u.Id, u.Email, u.DisplayName, u.AvatarUrl, s.Permission, s.SharedAt))
         .ToList();
 
     public bool Add(string formId, string userId, string sharedBy)

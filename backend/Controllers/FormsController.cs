@@ -11,20 +11,21 @@ namespace IescoForms.Api.Controllers;
 [Route("api/forms")]
 public class FormsController(
     IFormStore store,
-    INotificationStore notifications,
+    FormNotifier notifier,
     ImageStorage images,
-    FormAccess access) : ControllerBase
+    FormAccess access,
+    IUserTemplateStore userTemplates,
+    IFormActivityStore activity) : ControllerBase
 {
     private string CurrentUserId => access.CurrentUserId;
 
     /// <summary>
-    /// Avisa al dueno de un cambio en su formulario. Se avisa aunque el cambio lo
-    /// haya hecho el mismo: sirve de registro de actividad. Los avisos del mismo
-    /// tipo se agrupan mientras no se lean, asi que teclear un titulo no genera
-    /// un aviso por pulsacion.
+    /// Avisa de un cambio en el formulario al dueno y a quienes colaboran en el.
+    /// Se avisa aunque el cambio lo haya hecho uno mismo: sirve de registro de
+    /// actividad. Los avisos del mismo tipo se agrupan mientras no se lean, asi
+    /// que teclear un titulo no genera un aviso por pulsacion.
     /// </summary>
-    private void Notify(Form form, string type) =>
-        notifications.Record(form.OwnerId, type, form.Id, form.Title);
+    private void Notify(Form form, string type) => notifier.Notify(form, type);
 
     /// <summary>
     /// Devuelve el formulario solo si el usuario llega al nivel pedido. Si no,
@@ -89,18 +90,104 @@ public class FormsController(
     public ActionResult<Form> Create([FromBody] CreateFormRequest request)
     {
         var form = store.CreateForm(request.Title, request.Description, CurrentUserId);
-        Notify(form, NotificationType.FormUpdated);
+        Notify(form, NotificationType.FormCreated);
 
         return CreatedAtAction(nameof(GetById), new { id = form.Id }, access.WithAccess(form));
     }
 
+    /// <summary>
+    /// Crea un formulario desde una plantilla del catalogo o de un usuario. Las
+    /// imagenes subidas se copian: el formulario nuevo tiene las suyas y puede
+    /// cambiarlas o borrarse sin dejar a la plantilla sin fondo.
+    /// </summary>
     [HttpPost("from-template/{templateId}")]
     public ActionResult<Form> CreateFromTemplate(string templateId)
     {
-        var form = store.CreateFormFromTemplate(templateId, CurrentUserId);
-        return form is null
-            ? Problem($"No existe la plantilla '{templateId}'.", statusCode: StatusCodes.Status404NotFound)
-            : CreatedAtAction(nameof(GetById), new { id = form.Id }, access.WithAccess(form));
+        // Las del catalogo son instancias compartidas: se trabaja sobre una copia
+        // para que MapImages no las modifique para todos.
+        var template = SeedData.FindTemplate(templateId)?.Clone() ?? userTemplates.Find(templateId);
+        if (template is null)
+            return Problem($"No existe la plantilla '{templateId}'.", statusCode: StatusCodes.Status404NotFound);
+
+        template.MapImages(images.Copy);
+        var form = store.CreateFormFrom(template, CurrentUserId);
+        Notify(form, NotificationType.FormCreated);
+
+        return CreatedAtAction(nameof(GetById), new { id = form.Id }, access.WithAccess(form));
+    }
+
+    /// <summary>
+    /// Copia un formulario con todo su contenido, pero sin respuestas, sin
+    /// compartidos, sin enlaces y sin cierre. La copia nace en borrador y es de
+    /// quien la pide, aunque el original fuera de otro.
+    /// </summary>
+    [HttpPost("{id}/duplicate")]
+    public ActionResult<Form> Duplicate(string id)
+    {
+        if (Editable(id) is null) return FormNotFound(id);
+
+        var template = store.ToTemplate(id);
+        if (template is null) return FormNotFound(id);
+
+        template.MapImages(images.Copy);
+        // El titulo admite 200 caracteres; el prefijo no puede pasarse de ahi.
+        var title = $"Copia de {template.Name}";
+        if (title.Length > 200) title = title[..200];
+
+        var copy = store.CreateFormFrom(template, CurrentUserId, title);
+        Notify(copy, NotificationType.FormCreated);
+
+        return CreatedAtAction(nameof(GetById), new { id = copy.Id }, access.WithAccess(copy));
+    }
+
+    /// <summary>
+    /// Guarda el formulario como plantilla del equipo. Es una foto del momento:
+    /// cambios posteriores al formulario no la tocan, ni al reves.
+    /// </summary>
+    [HttpPost("{id}/save-as-template")]
+    public ActionResult<Template> SaveAsTemplate(string id, [FromBody] SaveAsTemplateRequest request)
+    {
+        var form = Editable(id);
+        if (form is null) return FormNotFound(id);
+
+        var template = store.ToTemplate(id);
+        if (template is null) return FormNotFound(id);
+
+        if (!string.IsNullOrWhiteSpace(request.Name)) template.Name = request.Name.Trim();
+        if (request.Description is not null) template.Description = request.Description.Trim();
+
+        template.MapImages(images.Copy);
+        var saved = userTemplates.Add(template, CurrentUserId);
+        saved.CanDelete = true;
+
+        notifier.Log(form, FormActivityAction.SavedAsTemplate, saved.Name);
+        return Ok(saved);
+    }
+
+    /// <summary>Cierre por fecha, cupo de respuestas y mensaje final.</summary>
+    [HttpPatch("{id}/settings")]
+    public ActionResult<Form> UpdateSettings(string id, [FromBody] UpdateFormSettingsRequest request)
+    {
+        var form = Editable(id);
+        if (form is null) return FormNotFound(id);
+
+        var updated = store.UpdateSettings(id, request.ClosesAt, request.ClearClosesAt == true,
+            request.MaxResponses, request.ConfirmationMessage);
+        if (updated is null) return FormNotFound(id);
+
+        // Sin aviso: no cambia lo que ven los colaboradores al editar. Pero si
+        // queda en el historial, porque explica por que dejo de recibir respuestas.
+        notifier.Log(form, FormActivityAction.SettingsUpdated);
+
+        return Ok(access.WithAccess(updated));
+    }
+
+    /// <summary>Historial del formulario. Lo ve cualquiera con acceso.</summary>
+    [HttpGet("{id}/activity")]
+    public ActionResult<IReadOnlyList<FormActivity>> GetActivity(string id)
+    {
+        if (WithLevel(id, FormAccessLevel.View) is null) return FormNotFound(id);
+        return Ok(activity.GetForForm(id, limit: 100));
     }
 
     [HttpPatch("{id}")]
@@ -345,7 +432,7 @@ public class FormsController(
 
         if (file is null) return Problem("No llego ningun archivo.", statusCode: StatusCodes.Status400BadRequest);
 
-        var result = await images.SaveAsync(file, cancellationToken);
+        var result = await images.SaveAsync(file, ImageStorage.Backgrounds, cancellationToken);
         if (!result.Ok)
         {
             ModelState.AddModelError("file", result.Error!);
@@ -417,7 +504,7 @@ public class FormsController(
         if (!form.Questions.Any(q => q.Id == questionId)) return QuestionNotFound(id, questionId);
         if (file is null) return Problem("No llego ningun archivo.", statusCode: StatusCodes.Status400BadRequest);
 
-        var result = await images.SaveAsync(file, cancellationToken);
+        var result = await images.SaveAsync(file, ImageStorage.Backgrounds, cancellationToken);
         if (!result.Ok)
         {
             ModelState.AddModelError("file", result.Error!);
@@ -455,7 +542,7 @@ public class FormsController(
         if (form is null) return FormNotFound(id);
         if (file is null) return Problem("No llego ningun archivo.", statusCode: StatusCodes.Status400BadRequest);
 
-        var result = await images.SaveAsync(file, cancellationToken);
+        var result = await images.SaveAsync(file, ImageStorage.Backgrounds, cancellationToken);
         if (!result.Ok)
         {
             ModelState.AddModelError("file", result.Error!);

@@ -24,6 +24,8 @@ public class IescoFormsDbContext(DbContextOptions<IescoFormsDbContext> options) 
     public DbSet<NotificationRow> Notifications => Set<NotificationRow>();
     public DbSet<FormShareRow> FormShares => Set<FormShareRow>();
     public DbSet<FormLinkRow> FormLinks => Set<FormLinkRow>();
+    public DbSet<FormActivityRow> FormActivity => Set<FormActivityRow>();
+    public DbSet<UserTemplateRow> UserTemplates => Set<UserTemplateRow>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -206,6 +208,7 @@ public class IescoFormsDbContext(DbContextOptions<IescoFormsDbContext> options) 
             e.Property(x => x.Id).HasColumnType("varchar(36)");
             e.Property(x => x.UserId).HasColumnType("varchar(36)");
             e.Property(x => x.FormId).HasColumnType("varchar(36)");
+            e.Property(x => x.ActorId).HasColumnType("varchar(36)");
 
             // "Count" es palabra reservada en T-SQL; EF la entrecomilla sola.
             e.Property(x => x.Count).HasColumnName("Count");
@@ -219,6 +222,32 @@ public class IescoFormsDbContext(DbContextOptions<IescoFormsDbContext> options) 
                 .WithMany()
                 .HasForeignKey(x => x.FormId)
                 .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        b.Entity<FormActivityRow>(e =>
+        {
+            e.ToTable("FormActivity");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnType("varchar(36)");
+            e.Property(x => x.FormId).HasColumnType("varchar(36)");
+            e.Property(x => x.UserId).HasColumnType("varchar(36)");
+            e.Property(x => x.Action).HasColumnType("varchar(40)");
+            e.Property(x => x.Count).HasColumnName("Count");
+
+            // Sin cascada, como el resto de hijas de Forms: el borrado definitivo
+            // las limpia a mano en SqlFormStore.
+            e.HasOne<FormRow>()
+                .WithMany()
+                .HasForeignKey(x => x.FormId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        b.Entity<UserTemplateRow>(e =>
+        {
+            e.ToTable("UserTemplates");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnType("varchar(36)");
+            e.Property(x => x.OwnerId).HasColumnType("varchar(36)");
         });
     }
 }

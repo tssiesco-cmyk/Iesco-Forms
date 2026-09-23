@@ -72,39 +72,98 @@ public class InMemoryFormStore : IFormStore
         return form;
     }
 
-    public Form? CreateFormFromTemplate(string templateId, string ownerId)
+    public Form CreateFormFrom(Template template, string ownerId, string? title = null)
+    {
+        var form = new Form
+        {
+            Id = NewId(),
+            Title = string.IsNullOrWhiteSpace(title) ? template.Name : title.Trim(),
+            Description = template.Description,
+            Status = FormStatus.Draft,
+            OwnerId = ownerId,
+            CreatedAt = Today(),
+            BackgroundImage = template.BackgroundImage,
+            BackgroundOverlay = template.BackgroundOverlay,
+            BackgroundPerQuestion = template.BackgroundPerQuestion,
+            IntroBackgroundImage = template.IntroBackgroundImage,
+            CoverEnabled = template.CoverEnabled,
+            CoverTitle = template.CoverTitle,
+            CoverSubtitle = template.CoverSubtitle,
+            CoverWelcome = template.CoverWelcome,
+            ConfirmationMessage = template.ConfirmationMessage,
+            IntroFields = [.. template.IntroFields.Select(i => new IntroField
+            {
+                Id = NewId(),
+                Type = i.Type,
+                Label = i.Label,
+                Placeholder = i.Placeholder,
+                Required = i.Required,
+                Enabled = i.Enabled,
+            })],
+            Questions = [.. template.Questions.Select(q => new Question
+            {
+                Id = NewId(),
+                Type = q.Type,
+                Title = q.Title,
+                Description = q.Description,
+                Required = q.Required,
+                TextCase = q.TextCase,
+                BackgroundImage = q.BackgroundImage,
+                Options = [.. q.Options.Select(text => new QuestionOption { Id = NewId(), Text = text })],
+            })],
+        };
+
+        lock (_gate) _forms.Insert(0, form);
+        return form;
+    }
+
+    public Template? ToTemplate(string formId)
     {
         lock (_gate)
         {
-            var template = _templates.FirstOrDefault(t => t.Id == templateId);
-            if (template is null) return null;
+            var form = _forms.FirstOrDefault(f => f.Id == formId);
+            if (form is null) return null;
 
-            var form = new Form
+            return new Template
             {
-                Id = NewId(),
-                Title = template.Name,
-                Description = template.Description,
-                Status = FormStatus.Draft,
-                OwnerId = ownerId,
-                CreatedAt = Today(),
-                BackgroundImage = template.BackgroundImage,
-                CoverEnabled = template.CoverEnabled,
-                CoverTitle = template.CoverTitle,
-                CoverSubtitle = template.CoverSubtitle,
-                CoverWelcome = template.CoverWelcome,
-                IntroFields = [],
-                Questions = [.. template.Questions.Select(q => new Question
+                Name = form.Title,
+                Description = form.Description,
+                BackgroundImage = form.BackgroundImage,
+                BackgroundOverlay = form.BackgroundOverlay,
+                BackgroundPerQuestion = form.BackgroundPerQuestion,
+                IntroBackgroundImage = form.IntroBackgroundImage,
+                CoverEnabled = form.CoverEnabled,
+                CoverTitle = form.CoverTitle,
+                CoverSubtitle = form.CoverSubtitle,
+                CoverWelcome = form.CoverWelcome,
+                ConfirmationMessage = form.ConfirmationMessage,
+                IntroFields = [.. form.IntroFields.Select(i => new TemplateIntroField
                 {
-                    Id = NewId(),
-                    Type = q.Type,
-                    Title = q.Title,
-                    Description = string.Empty,
-                    Required = q.Required,
-                    Options = [.. q.Options.Select(text => new QuestionOption { Id = NewId(), Text = text })],
+                    Type = i.Type, Label = i.Label, Placeholder = i.Placeholder, Required = i.Required, Enabled = i.Enabled,
+                })],
+                Questions = [.. form.Questions.Select(q => new TemplateQuestion
+                {
+                    Type = q.Type, Title = q.Title, Description = q.Description, Required = q.Required,
+                    TextCase = q.TextCase, BackgroundImage = q.BackgroundImage,
+                    Options = [.. q.Options.Select(o => o.Text)],
                 })],
             };
+        }
+    }
 
-            _forms.Insert(0, form);
+    public Form? UpdateSettings(string formId, DateTimeOffset? closesAt, bool clearClosesAt, int? maxResponses, string? confirmationMessage)
+    {
+        lock (_gate)
+        {
+            var form = _forms.FirstOrDefault(f => f.Id == formId);
+            if (form is null) return null;
+
+            if (clearClosesAt) form.ClosesAt = null;
+            else if (closesAt is not null) form.ClosesAt = closesAt;
+            if (maxResponses is not null) form.MaxResponses = maxResponses > 0 ? maxResponses : null;
+            if (confirmationMessage is not null) form.ConfirmationMessage = confirmationMessage;
+
+            RefreshResponseCount(form);
             return form;
         }
     }
@@ -518,6 +577,11 @@ public class InMemoryFormStore : IFormStore
             _responses.Insert(0, response);
             return response;
         }
+    }
+
+    public bool DeleteResponse(string formId, string responseId)
+    {
+        lock (_gate) return _responses.RemoveAll(r => r.Id == responseId && r.FormId == formId) > 0;
     }
 
     /// <summary>

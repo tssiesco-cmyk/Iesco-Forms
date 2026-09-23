@@ -22,11 +22,17 @@ public class User
     /// </summary>
     public string PasswordHash { get; set; } = string.Empty;
 
-    public UserProfile ToProfile() => new(Id, Email, DisplayName, Role);
+    /// <summary>
+    /// Ruta publica de la foto de perfil ("/uploads/avatars/xxx.png"), o cadena
+    /// vacia si no subio ninguna: entonces la interfaz pinta sus iniciales.
+    /// </summary>
+    public string AvatarUrl { get; set; } = string.Empty;
+
+    public UserProfile ToProfile() => new(Id, Email, DisplayName, Role, AvatarUrl);
 }
 
 /// <summary>Lo unico del usuario que sale hacia el cliente.</summary>
-public record UserProfile(string Id, string Email, string DisplayName, string Role);
+public record UserProfile(string Id, string Email, string DisplayName, string Role, string AvatarUrl);
 
 /// <summary>
 /// Lo que ve un administrador en la lista de usuarios. Tampoco lleva el hash.
@@ -35,6 +41,7 @@ public record UserSummary(
     string Id,
     string Email,
     string DisplayName,
+    string AvatarUrl,
     string Role,
     bool IsActive,
     DateTimeOffset CreatedAt,

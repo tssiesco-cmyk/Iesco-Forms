@@ -104,6 +104,30 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = 5,
                 Window = TimeSpan.FromMinutes(15),
             }));
+
+    // Login por IP: holgado a proposito. En la oficina todos comparten IP, y el
+    // bloqueo que importa es por cuenta (LoginThrottle: 5 fallos, 15 minutos).
+    // Esto solo corta a un script que prueba contrasenas contra muchas cuentas.
+    options.AddPolicy(AuthController.LoginPolicy, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 50,
+                Window = TimeSpan.FromMinutes(5),
+            }));
+
+    // Enviar respuestas no pide sesion con un enlace. El limite es alto a
+    // proposito: en una capacitacion toda la sala responde a la vez desde la
+    // misma IP. Lo que corta es un script mandando miles.
+    options.AddPolicy(ResponsesController.SubmitPolicy, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+            }));
 });
 
 builder.Services.AddControllers().AddJsonOptions(options =>
@@ -127,12 +151,21 @@ builder.Services.AddScoped<IUserStore, SqlUserStore>();
 builder.Services.AddScoped<INotificationStore, SqlNotificationStore>();
 builder.Services.AddScoped<IFormShareStore, SqlFormShareStore>();
 builder.Services.AddScoped<IFormLinkStore, SqlFormLinkStore>();
+builder.Services.AddScoped<IFormActivityStore, SqlFormActivityStore>();
+builder.Services.AddScoped<IUserTemplateStore, SqlUserTemplateStore>();
 
 // Decide que puede hacer el usuario conectado con cada formulario. Lee el
 // usuario de la peticion, por eso necesita el HttpContext.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<FormAccess>();
 builder.Services.AddSingleton<ImageStorage>();
+
+// Bloqueo por cuenta tras fallos de login. Singleton: el contador tiene que
+// sobrevivir entre peticiones.
+builder.Services.AddSingleton<LoginThrottle>();
+
+// Reparte los avisos de un formulario entre su dueno y sus colaboradores.
+builder.Services.AddScoped<FormNotifier>();
 
 var app = builder.Build();
 

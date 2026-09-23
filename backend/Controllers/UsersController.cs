@@ -16,9 +16,27 @@ namespace IescoForms.Api.Controllers;
 [ApiController]
 [Authorize(Roles = UserRole.Admin)]
 [Route("api/users")]
-public class UsersController(IUserStore users, ILogger<UsersController> logger) : ControllerBase
+public class UsersController(
+    IUserStore users,
+    INotificationStore notifications,
+    ILogger<UsersController> logger) : ControllerBase
 {
     private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+
+    /// <summary>
+    /// Anota el cambio en la campana de dos personas: la afectada, que es a
+    /// quien le cambia algo, y el administrador que lo hizo, para que le quede
+    /// registro de lo que toca. Si se administra a si mismo, solo una vez.
+    ///
+    /// Van sin formulario, con el nombre del afectado como asunto.
+    /// </summary>
+    private void Notify(string type, UserSummary affected)
+    {
+        notifications.Record(affected.Id, type, formId: null, affected.DisplayName, CurrentUserId);
+
+        if (affected.Id != CurrentUserId)
+            notifications.Record(CurrentUserId, type, formId: null, affected.DisplayName, CurrentUserId);
+    }
 
     [HttpGet]
     public ActionResult<IReadOnlyList<UserSummary>> GetAll() => Ok(users.List());
@@ -37,6 +55,7 @@ public class UsersController(IUserStore users, ILogger<UsersController> logger) 
             return Problem("Ya existe un usuario con ese correo.", statusCode: StatusCodes.Status409Conflict);
 
         var created = users.Create(request.Email, request.DisplayName, request.Role, request.Password);
+        Notify(NotificationType.UserCreated, created);
 
         logger.LogInformation("{AdminId} creo el usuario {Email} ({Role}).", CurrentUserId, created.Email, created.Role);
         return Created($"/api/users/{created.Id}", created);
@@ -71,6 +90,22 @@ public class UsersController(IUserStore users, ILogger<UsersController> logger) 
         var updated = users.Update(id, request.DisplayName, request.Role, request.IsActive);
         if (updated is null) return NotFound();
 
+        // Un aviso por cada cosa que cambio de verdad: el PATCH puede traer las
+        // tres a la vez, y mandar "rol cambiado" cuando solo se corrigio una
+        // tilde del nombre seria mentir.
+        if (request.Role is not null && request.Role != existing.Role)
+            Notify(NotificationType.UserRoleChanged, updated);
+
+        if (request.IsActive is not null && request.IsActive != existing.IsActive)
+        {
+            Notify(request.IsActive.Value
+                ? NotificationType.UserActivated
+                : NotificationType.UserDeactivated, updated);
+        }
+
+        if (request.DisplayName is not null && request.DisplayName.Trim() != existing.DisplayName)
+            Notify(NotificationType.AccountUpdated, updated);
+
         logger.LogInformation("{AdminId} modifico el usuario {Email}.", CurrentUserId, updated.Email);
         return Ok(updated);
     }
@@ -82,7 +117,12 @@ public class UsersController(IUserStore users, ILogger<UsersController> logger) 
     [HttpPost("{id}/password")]
     public IActionResult ResetPassword(string id, [FromBody] ResetPasswordRequest request)
     {
+        var affected = users.GetSummary(id);
+        if (affected is null) return NotFound();
+
         if (!users.SetPassword(id, request.NewPassword)) return NotFound();
+
+        Notify(NotificationType.PasswordReset, affected);
 
         logger.LogInformation("{AdminId} restablecio la contrasena del usuario {UserId}.", CurrentUserId, id);
         return NoContent();
@@ -96,6 +136,12 @@ public class UsersController(IUserStore users, ILogger<UsersController> logger) 
     public ActionResult<UserSummary> DismissPasswordRequest(string id)
     {
         var updated = users.DismissPasswordReset(id);
-        return updated is null ? NotFound() : Ok(updated);
+        if (updated is null) return NotFound();
+
+        // Quien la pidio se queda esperando una contrasena que no va a llegar,
+        // asi que conviene que lo sepa.
+        Notify(NotificationType.PasswordRequestDismissed, updated);
+
+        return Ok(updated);
     }
 }

@@ -116,7 +116,7 @@ const ConfirmText = styled.p`
 
 function Forms() {
   const navigate = useNavigate();
-  const { forms, status, error, reload, createForm, trashForm } = useForms();
+  const { forms, status, error, reload, createForm, trashForm, duplicateForm } = useForms();
   const [search, setSearch] = useState("");
   // todos | Activo | Borrador
   const [statusFilter, setStatusFilter] = useState("todos");
@@ -246,6 +246,7 @@ function Forms() {
               onEdit={() => navigate(`/formularios/${f.id}/editar`)}
               onPreview={() => navigate(`/formularios/${f.id}/vista`)}
               onResults={() => navigate(`/formularios/${f.id}/resultados`)}
+              onDuplicate={f.access === "owner" || f.access === "edit" ? () => duplicateForm(f.id) : undefined}
               onShare={f.access === "owner" ? () => setShareTarget(f) : undefined}
               onDelete={f.access === "owner" ? () => setDeleteTarget(f) : undefined}
             />
