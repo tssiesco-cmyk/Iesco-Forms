@@ -185,6 +185,9 @@ export const formsApi = {
   addOption: (formId, questionId) => post(`/forms/${formId}/questions/${questionId}/options`),
   updateOption: (formId, questionId, optionId, text) =>
     patch(`/forms/${formId}/questions/${questionId}/options/${optionId}`, { text }),
+  /** "" quita el salto, "end" termina el formulario, o el id de otra pregunta. */
+  setOptionJump: (formId, questionId, optionId, jumpTo) =>
+    patch(`/forms/${formId}/questions/${questionId}/options/${optionId}`, { jumpTo }),
   deleteOption: (formId, questionId, optionId) =>
     del(`/forms/${formId}/questions/${questionId}/options/${optionId}`),
 

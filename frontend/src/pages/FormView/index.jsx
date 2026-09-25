@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import styled, { keyframes, css } from "styled-components";
-import { FiArrowRight, FiArrowLeft, FiCheck, FiX, FiAlertTriangle } from "react-icons/fi";
+import { FiArrowRight, FiArrowLeft, FiCheck, FiX, FiAlertTriangle, FiStar } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import { useAuth } from "../../context/AuthContext";
 import { formsApi, linksApi } from "../../services/api";
 import Spinner from "../../components/atoms/Spinner";
+import {
+  DEFAULT_SCALE, isAnswered, isSingleOption, nextQuestionIndex, visitedQuestionIds,
+} from "../../services/questionTypes";
 
 /* --- ANIMATIONS --- */
 const slideUp = keyframes`
@@ -264,7 +267,7 @@ const OptionKey = styled.span`
 const OptionCheckmark = styled.div`
   width: 22px;
   height: 22px;
-  border-radius: ${({ $type }) => $type === "single_choice" ? "50%" : "4px"};
+  border-radius: ${({ $type }) => $type === "multiple_choice" ? "4px" : "50%"};
   border: 2px solid ${({ $selected }) => $selected ? "var(--fv-accent)" : "var(--fv-border-strong)"};
   display: flex;
   align-items: center;
@@ -274,6 +277,64 @@ const OptionCheckmark = styled.div`
   transition: all 0.15s;
   background: ${({ $selected }) => $selected ? "var(--fv-accent)" : "transparent"};
   color: ${({ $selected }) => $selected ? "var(--fv-on-accent)" : "transparent"};
+`;
+
+/* Lista desplegable: mismo trazo que los campos de texto. */
+const DropdownSelect = styled.select`
+  width: 100%;
+  background: var(--fv-surface);
+  border: 1px solid var(--fv-border);
+  border-radius: 8px;
+  color: var(--fv-text);
+  font-size: 18px;
+  padding: 14px 16px;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
+
+  &:focus { border-color: var(--fv-accent); }
+
+  /* La lista que abre el navegador no hereda el fondo transparente. */
+  option { color: #191919; background: #FFFFFF; }
+`;
+
+const ScaleRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+`;
+
+const StarButton = styled.button`
+  color: ${({ $on }) => $on ? "var(--fv-accent)" : "var(--fv-border-strong)"};
+  padding: 4px;
+  transition: transform 0.1s ease, color 0.15s;
+
+  svg { fill: ${({ $on }) => $on ? "currentColor" : "none"}; }
+
+  &:hover { transform: scale(1.12); }
+`;
+
+const NpsButton = styled.button`
+  flex: 1;
+  min-width: 42px;
+  height: 52px;
+  border-radius: 8px;
+  border: 1px solid ${({ $selected }) => $selected ? "var(--fv-accent)" : "var(--fv-border)"};
+  background: ${({ $selected }) => $selected ? "var(--fv-accent)" : "var(--fv-surface)"};
+  color: ${({ $selected }) => $selected ? "var(--fv-on-accent)" : "var(--fv-text)"};
+  font-size: 17px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+
+  &:hover { border-color: var(--fv-border-strong); }
+`;
+
+const ScaleLegend = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--fv-muted);
 `;
 
 /* --- NAVIGATION --- */
@@ -628,8 +689,13 @@ function FormView() {
   // haya ninguno, se deduce del formulario ya cargado.
   const [chosenStep, setStep] = useState(null);
   const [introData, setIntroData] = useState({});
-  const [currentIndex, setCurrentIndex] = useState(0);
+  // Preguntas vistas, en orden. Con saltos, "Atras" tiene que volver por el
+  // mismo camino y no simplemente a la pregunta de arriba.
+  const [history, setHistory] = useState([0]);
   const [answers, setAnswers] = useState({});
+  // Elegir una opcion avanza sola tras una pausa; se cancela si mientras tanto
+  // se navega a mano, para no saltar dos preguntas.
+  const autoAdvance = useRef(null);
   const [direction, setDirection] = useState("forward");
   const [animKey, setAnimKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -778,34 +844,58 @@ function FormView() {
 
   const step = chosenStep ?? (hasIntro ? "intro" : "questions");
 
+  const currentIndex = history[history.length - 1];
   const question = hasQuestions ? form.questions[currentIndex] : null;
   const progress = hasQuestions ? ((currentIndex + 1) / form.questions.length) * 100 : 0;
   const currentAnswer = question ? answers[question.id] : undefined;
 
-  const isAnswered = () => {
-    if (!currentAnswer) return false;
-    if (Array.isArray(currentAnswer)) return currentAnswer.length > 0;
-    return currentAnswer.toString().trim() !== "";
+  // Un numero a medio escribir ("-", ".") no deja seguir: el servidor lo rechazaria.
+  const hasValidFormat = (value) =>
+    question?.type !== "number" || !isAnswered(value) || Number.isFinite(Number(value));
+
+  const canProceedWith = (value) =>
+    (!question?.required || isAnswered(value)) && hasValidFormat(value);
+  const canProceed = canProceedWith(currentAnswer);
+
+  // Con la respuesta actual, aqui termina el formulario? Cambia el boton a "Enviar".
+  const isLastStep = hasQuestions && nextQuestionIndex(form.questions, currentIndex, currentAnswer) === -1;
+
+  const cancelAutoAdvance = () => {
+    clearTimeout(autoAdvance.current);
+    autoAdvance.current = null;
   };
 
-  const canProceed = !question?.required || isAnswered();
+  /**
+   * Avanza segun la logica del formulario, o envia si ahi termina. Recibe las
+   * respuestas cuando la llama el avance automatico: el estado de este render
+   * todavia no trae la opcion recien elegida.
+   */
+  const goNext = async (currentAnswers = answers) => {
+    cancelAutoAdvance();
+    if (!canProceedWith(currentAnswers[question.id]) || submitting) return;
 
-  const goNext = async () => {
-    if (!canProceed || submitting) return;
+    const next = nextQuestionIndex(form.questions, currentIndex, currentAnswers[question.id]);
 
-    if (currentIndex < form.questions.length - 1) {
+    if (next !== -1) {
       setDirection("forward");
       setAnimKey((k) => k + 1);
-      setCurrentIndex((i) => i + 1);
+      setHistory((prev) => [...prev, next]);
       return;
     }
 
-    // Ultima pregunta: se envia. Aqui si hay que esperar la respuesta del
-    // servidor, porque quien responde tiene que saber si su envio llego.
+    // Ultima pregunta del camino: se envia. Aqui si hay que esperar la
+    // respuesta del servidor, porque quien responde tiene que saber si su
+    // envio llego. Solo van las preguntas del camino: si contesto una y luego
+    // volvio atras y eligio otra rama, esa respuesta ya no cuenta.
+    const visited = new Set(visitedQuestionIds(form.questions, currentAnswers));
+    const pathAnswers = Object.fromEntries(
+      Object.entries(currentAnswers).filter(([questionId]) => visited.has(questionId))
+    );
+
     setSubmitting(true);
     setSubmitError(null);
 
-    const result = await addResponse(id, answers, buildRespondent(), token);
+    const result = await addResponse(id, pathAnswers, buildRespondent(), token);
     setSubmitting(false);
 
     if (result.ok) setStep("submitted");
@@ -813,23 +903,33 @@ function FormView() {
   };
 
   const goPrev = () => {
-    if (currentIndex > 0) {
+    cancelAutoAdvance();
+    if (history.length > 1) {
       setDirection("backward");
       setAnimKey((k) => k + 1);
-      setCurrentIndex((i) => i - 1);
+      setHistory((prev) => prev.slice(0, -1));
     }
   };
 
-  const handleTextChange = (value) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [question.id]: applyTextCase(value, question.textCase),
-    }));
+  const setAnswer = (value) => setAnswers((prev) => ({ ...prev, [question.id]: value }));
+
+  const handleTextChange = (value) => setAnswer(applyTextCase(value, question.textCase));
+
+  /** Opcion unica, Si/No, estrellas y NPS: se elige y se avanza solo. */
+  const selectAndAdvance = (value) => {
+    const next = { ...answers, [question.id]: value };
+    setAnswers(next);
+    cancelAutoAdvance();
+    autoAdvance.current = setTimeout(() => goNext(next), 400);
   };
 
-  const handleSingleSelect = (optionId) => {
-    setAnswers((prev) => ({ ...prev, [question.id]: optionId }));
-    setTimeout(goNext, 400);
+  const handleSingleSelect = (optionId) => selectAndAdvance(optionId);
+
+  // Solo cifras, un signo y un separador decimal. La coma pasa a punto, que
+  // es lo que entiende el servidor.
+  const handleNumberChange = (value) => {
+    const normalized = value.replace(",", ".");
+    if (normalized === "" || /^-?\d*\.?\d*$/.test(normalized)) setAnswer(normalized);
   };
 
   const handleMultiSelect = (optionId) => {
@@ -994,7 +1094,7 @@ function FormView() {
             />
           )}
 
-          {question.type === "single_choice" && (
+          {isSingleOption(question.type) && question.type !== "dropdown" && (
             <OptionsGrid>
               {question.options.map((opt, i) => (
                 <OptionButton
@@ -1015,6 +1115,85 @@ function FormView() {
                 </OptionButton>
               ))}
             </OptionsGrid>
+          )}
+
+          {question.type === "dropdown" && (
+            <DropdownSelect
+              value={currentAnswer || ""}
+              onChange={(e) => setAnswer(e.target.value)}
+              autoFocus
+            >
+              <option value="">Elige una opcion...</option>
+              {question.options.map((opt) => (
+                <option key={opt.id} value={opt.id}>{opt.text}</option>
+              ))}
+            </DropdownSelect>
+          )}
+
+          {question.type === "rating" && (
+            <ScaleRow role="radiogroup" aria-label="Calificacion">
+              {Array.from({ length: question.scaleMax || DEFAULT_SCALE }, (_, i) => {
+                const value = String(i + 1);
+                return (
+                  <StarButton
+                    key={value}
+                    role="radio"
+                    aria-checked={currentAnswer === value}
+                    aria-label={`${value} de ${question.scaleMax || DEFAULT_SCALE}`}
+                    $on={Number(currentAnswer) >= i + 1}
+                    onClick={() => selectAndAdvance(value)}
+                  >
+                    <FiStar size={38} />
+                  </StarButton>
+                );
+              })}
+            </ScaleRow>
+          )}
+
+          {question.type === "nps" && (
+            <>
+              <ScaleRow role="radiogroup" aria-label="Puntuacion de 0 a 10">
+                {Array.from({ length: 11 }, (_, i) => {
+                  const value = String(i);
+                  return (
+                    <NpsButton
+                      key={value}
+                      role="radio"
+                      aria-checked={currentAnswer === value}
+                      $selected={currentAnswer === value}
+                      onClick={() => selectAndAdvance(value)}
+                    >
+                      {i}
+                    </NpsButton>
+                  );
+                })}
+              </ScaleRow>
+              <ScaleLegend>
+                <span>Nada probable</span>
+                <span>Muy probable</span>
+              </ScaleLegend>
+            </>
+          )}
+
+          {question.type === "number" && (
+            <TextInput
+              type="text"
+              inputMode="decimal"
+              placeholder="Escribe un numero..."
+              value={currentAnswer || ""}
+              onChange={(e) => handleNumberChange(e.target.value)}
+              autoFocus
+            />
+          )}
+
+          {question.type === "date" && (
+            <TextInput
+              type="date"
+              value={currentAnswer || ""}
+              onChange={(e) => setAnswer(e.target.value)}
+              style={{ colorScheme: backgroundPropsFor(resolveBackground(question)).$hasBackground ? "dark" : undefined }}
+              autoFocus
+            />
           )}
 
           {question.type === "multiple_choice" && (
@@ -1056,17 +1235,17 @@ function FormView() {
         </PressEnter>
 
         <NavButtons>
-          <NavButton onClick={goPrev} disabled={currentIndex === 0}>
+          <NavButton onClick={goPrev} disabled={history.length === 1}>
             <FiArrowLeft size={16} />
           </NavButton>
 
-          {currentIndex === form.questions.length - 1 ? (
-            <SubmitButton onClick={goNext} disabled={!canProceed || submitting}>
+          {isLastStep ? (
+            <SubmitButton onClick={() => goNext()} disabled={!canProceed || submitting}>
               {submitting ? "Enviando..." : "Enviar"}
               {submitting ? <Spinner $size={16} $color="currentColor" /> : <FiCheck size={16} />}
             </SubmitButton>
           ) : (
-            <NavButton onClick={goNext} disabled={!canProceed}>
+            <NavButton onClick={() => goNext()} disabled={!canProceed}>
               Siguiente <FiArrowRight size={16} />
             </NavButton>
           )}

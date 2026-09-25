@@ -12,6 +12,9 @@ const FormContext = createContext();
  */
 const TYPING_DELAY = 600;
 
+/** Cambios de una pregunta que se eligen de una vez y se guardan al momento. */
+const INSTANT_QUESTION_KEYS = ["required", "textCase", "jumpTo", "scaleMax"];
+
 export function FormProvider({ children }) {
   const toast = useToast();
   const notifications = useNotifications();
@@ -403,10 +406,10 @@ export function FormProvider({ children }) {
       questions: form.questions.map((q) => (q.id === questionId ? { ...q, ...changes } : q)),
     }));
 
-    // "required" y "textCase" son elecciones sueltas, no texto que se va
-    // tecleando: no hay nada que esperar antes de mandarlas.
+    // "required", "textCase", el salto y las estrellas son elecciones sueltas,
+    // no texto que se va tecleando: no hay nada que esperar antes de mandarlas.
     const keys = Object.keys(changes);
-    const isInstant = keys.length === 1 && (keys[0] === "required" || keys[0] === "textCase");
+    const isInstant = keys.length === 1 && INSTANT_QUESTION_KEYS.includes(keys[0]);
     const send = () => formsApi.updateQuestion(formId, questionId, changes);
 
     if (isInstant) {
@@ -419,9 +422,19 @@ export function FormProvider({ children }) {
   }, [patchFormLocally, runWrite, scheduleWrite, resyncForm]);
 
   const deleteQuestion = useCallback(async (formId, questionId) => {
+    // El servidor quita los saltos que llevaban a esta pregunta; aqui se hace
+    // lo mismo para que el editor no muestre un destino que ya no existe.
+    const clearJump = (jumpTo) => (jumpTo === questionId ? "" : jumpTo);
+
     patchFormLocally(formId, (form) => ({
       ...form,
-      questions: form.questions.filter((q) => q.id !== questionId),
+      questions: form.questions
+        .filter((q) => q.id !== questionId)
+        .map((q) => ({
+          ...q,
+          jumpTo: clearJump(q.jumpTo),
+          options: q.options.map((o) => ({ ...o, jumpTo: clearJump(o.jumpTo) })),
+        })),
     }));
 
     const { ok } = await runWrite(
@@ -501,6 +514,24 @@ export function FormProvider({ children }) {
       "No se pudo guardar la opcion"
     );
   }, [patchFormLocally, scheduleWrite]);
+
+  const setOptionJump = useCallback((formId, questionId, optionId, jumpTo) => {
+    patchFormLocally(formId, (form) => ({
+      ...form,
+      questions: form.questions.map((q) =>
+        q.id === questionId
+          ? { ...q, options: q.options.map((o) => (o.id === optionId ? { ...o, jumpTo } : o)) }
+          : q
+      ),
+    }));
+
+    runWrite(
+      () => formsApi.setOptionJump(formId, questionId, optionId, jumpTo),
+      "No se pudo guardar el salto"
+    ).then((res) => {
+      if (!res.ok) resyncForm(formId);
+    });
+  }, [patchFormLocally, runWrite, resyncForm]);
 
   const deleteOption = useCallback(async (formId, questionId, optionId) => {
     patchFormLocally(formId, (form) => ({
@@ -742,6 +773,7 @@ export function FormProvider({ children }) {
     reorderQuestions,
     addOption,
     updateOption,
+    setOptionJump,
     deleteOption,
     addIntroField,
     updateIntroField,

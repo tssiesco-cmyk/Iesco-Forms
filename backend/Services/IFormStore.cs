@@ -78,13 +78,21 @@ public interface IFormStore
     /// copias la otra se quedaria apuntando a una ruta que ya no existe.
     /// </summary>
     Question? DuplicateQuestion(string formId, string questionId);
-    Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase);
+    /// <param name="jumpTo">Salto de la pregunta: null no lo toca, vacio lo quita.</param>
+    /// <param name="scaleMax">Estrellas; solo se aplica a las preguntas rating.</param>
+    Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax);
+
+    /// <summary>
+    /// Al borrar una pregunta, los saltos que llevaban a ella se quitan: quien
+    /// responda seguira a la siguiente.
+    /// </summary>
     bool DeleteQuestion(string formId, string questionId);
     bool ReorderQuestions(string formId, int fromIndex, int toIndex);
 
     // --- Opciones ---
     QuestionOption? AddOption(string formId, string questionId);
-    bool UpdateOption(string formId, string questionId, string optionId, string? text);
+    /// <param name="jumpTo">Salto al elegir la opcion: null no lo toca, vacio lo quita.</param>
+    bool UpdateOption(string formId, string questionId, string optionId, string? text, string? jumpTo);
     bool DeleteOption(string formId, string questionId, string optionId);
 
     // --- Campos del respondedor ---

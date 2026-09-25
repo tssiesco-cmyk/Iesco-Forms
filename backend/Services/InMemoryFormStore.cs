@@ -74,6 +74,8 @@ public class InMemoryFormStore : IFormStore
 
     public Form CreateFormFrom(Template template, string ownerId, string? title = null)
     {
+        var ids = template.Questions.Select(_ => NewId()).ToList();
+
         var form = new Form
         {
             Id = NewId(),
@@ -100,16 +102,23 @@ public class InMemoryFormStore : IFormStore
                 Required = i.Required,
                 Enabled = i.Enabled,
             })],
-            Questions = [.. template.Questions.Select(q => new Question
+            Questions = [.. template.Questions.Select((q, i) => new Question
             {
-                Id = NewId(),
+                Id = ids[i],
                 Type = q.Type,
                 Title = q.Title,
                 Description = q.Description,
                 Required = q.Required,
                 TextCase = q.TextCase,
                 BackgroundImage = q.BackgroundImage,
-                Options = [.. q.Options.Select(text => new QuestionOption { Id = NewId(), Text = text })],
+                ScaleMax = q.ScaleMax,
+                JumpTo = FormLogic.JumpFromTemplate(q.JumpTo, ids) ?? string.Empty,
+                Options = [.. q.Options.Select((text, j) => new QuestionOption
+                {
+                    Id = NewId(),
+                    Text = text,
+                    JumpTo = FormLogic.JumpFromTemplate(q.OptionJumps.ElementAtOrDefault(j), ids) ?? string.Empty,
+                })],
             })],
         };
 
@@ -144,8 +153,10 @@ public class InMemoryFormStore : IFormStore
                 Questions = [.. form.Questions.Select(q => new TemplateQuestion
                 {
                     Type = q.Type, Title = q.Title, Description = q.Description, Required = q.Required,
-                    TextCase = q.TextCase, BackgroundImage = q.BackgroundImage,
+                    TextCase = q.TextCase, BackgroundImage = q.BackgroundImage, ScaleMax = q.ScaleMax,
+                    JumpTo = FormLogic.JumpToTemplate(q.JumpTo, [.. form.Questions.Select(x => x.Id)]),
                     Options = [.. q.Options.Select(o => o.Text)],
+                    OptionJumps = [.. q.Options.Select(o => FormLogic.JumpToTemplate(o.JumpTo, [.. form.Questions.Select(x => x.Id)]))],
                 })],
             };
         }
@@ -346,7 +357,14 @@ public class InMemoryFormStore : IFormStore
                 Title = string.Empty,
                 Description = string.Empty,
                 Required = false,
-                Options = QuestionType.HasOptions(type)
+                ScaleMax = type == QuestionType.Rating ? QuestionType.DefaultScale : null,
+                Options = type == QuestionType.YesNo
+                    ?
+                    [
+                        new QuestionOption { Id = NewId(), Text = "Sí" },
+                        new QuestionOption { Id = NewId(), Text = "No" },
+                    ]
+                    : QuestionType.HasOptions(type)
                     ?
                     [
                         new QuestionOption { Id = NewId(), Text = "Opcion 1" },
@@ -379,9 +397,11 @@ public class InMemoryFormStore : IFormStore
                 Description = original.Description,
                 Required = original.Required,
                 TextCase = original.TextCase,
+                ScaleMax = original.ScaleMax,
+                JumpTo = original.JumpTo,
                 // BackgroundImage queda vacia a proposito: ver el porque en IFormStore.
                 Options = original.Options
-                    .Select(o => new QuestionOption { Id = NewId(), Text = o.Text })
+                    .Select(o => new QuestionOption { Id = NewId(), Text = o.Text, JumpTo = o.JumpTo })
                     .ToList(),
             };
 
@@ -390,7 +410,7 @@ public class InMemoryFormStore : IFormStore
         }
     }
 
-    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase)
+    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax)
     {
         lock (_gate)
         {
@@ -401,6 +421,8 @@ public class InMemoryFormStore : IFormStore
             if (description is not null) question.Description = description;
             if (required.HasValue) question.Required = required.Value;
             if (textCase is not null) question.TextCase = textCase;
+            if (jumpTo is not null) question.JumpTo = jumpTo;
+            if (scaleMax.HasValue && question.Type == QuestionType.Rating) question.ScaleMax = scaleMax;
 
             return question;
         }
@@ -459,7 +481,7 @@ public class InMemoryFormStore : IFormStore
         }
     }
 
-    public bool UpdateOption(string formId, string questionId, string optionId, string? text)
+    public bool UpdateOption(string formId, string questionId, string optionId, string? text, string? jumpTo)
     {
         lock (_gate)
         {
@@ -467,6 +489,7 @@ public class InMemoryFormStore : IFormStore
             if (option is null) return false;
 
             if (text is not null) option.Text = text;
+            if (jumpTo is not null) option.JumpTo = jumpTo;
             return true;
         }
     }

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using IescoForms.Api.Models;
 using IescoForms.Api.Services;
 
 namespace IescoForms.Api.Contracts;
@@ -36,15 +37,24 @@ public record SaveAsTemplateRequest(
 
 public record AddQuestionRequest([Required] string Type);
 
+/// <summary>
+/// JumpTo: vacio quita el salto, "end" termina el formulario y cualquier otro
+/// valor es el id de una pregunta del mismo formulario.
+/// </summary>
 public record UpdateQuestionRequest(
     [MaxLength(500)] string? Title,
     [MaxLength(1000)] string? Description,
     bool? Required,
-    string? TextCase);
+    string? TextCase,
+    [MaxLength(36)] string? JumpTo,
+    [Range(QuestionType.MinScale, QuestionType.MaxScale)] int? ScaleMax);
 
 public record ReorderQuestionsRequest(int FromIndex, int ToIndex);
 
-public record UpdateOptionRequest([MaxLength(500)] string? Text);
+/// <summary>JumpTo con el mismo formato que en UpdateQuestionRequest.</summary>
+public record UpdateOptionRequest(
+    [MaxLength(500)] string? Text,
+    [MaxLength(36)] string? JumpTo);
 
 public record AddIntroFieldRequest(string? Type);
 

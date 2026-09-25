@@ -91,6 +91,12 @@ public class QuestionRow
     public string TextCase { get; set; } = string.Empty;
     public string BackgroundImage { get; set; } = string.Empty;
 
+    /// <summary>Salto al terminar la pregunta: NULL, 'end' o el id de otra pregunta.</summary>
+    public string? JumpTo { get; set; }
+
+    /// <summary>Estrellas de las preguntas rating. NULL en los demas tipos.</summary>
+    public int? ScaleMax { get; set; }
+
     /// <summary>
     /// Borrado logico. Una pregunta con respuestas no se puede borrar de verdad:
     /// ResponseAnswers la referencia y SQL Server no permite cascada por ese
@@ -110,6 +116,10 @@ public class QuestionOptionRow
     public string QuestionId { get; set; } = string.Empty;
     public int Position { get; set; }
     public string Text { get; set; } = string.Empty;
+
+    /// <summary>Salto al elegir esta opcion: NULL, 'end' o el id de otra pregunta.</summary>
+    public string? JumpTo { get; set; }
+
     public DateTimeOffset? DeletedAt { get; set; }
 
     public QuestionRow? Question { get; set; }

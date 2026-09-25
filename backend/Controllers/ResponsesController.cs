@@ -81,8 +81,14 @@ public class ResponsesController(
                 statusCode: StatusCodes.Status410Gone);
         }
 
+        // Con logica condicional no todas las preguntas se ven: solo cuentan las
+        // del recorrido que dejan estas respuestas. Las saltadas no se exigen y,
+        // si llegan (se contesto y luego se volvio atras), no se guardan.
+        var visited = FormLogic.VisitedQuestionIds(form.Questions, request.Answers).ToHashSet();
+        var path = form.Questions.Where(q => visited.Contains(q.Id)).ToList();
+
         // Las preguntas obligatorias deben venir contestadas.
-        var missing = form.Questions
+        var missing = path
             .Where(q => q.Required && !HasAnswer(request.Answers, q.Id))
             .Select(q => string.IsNullOrWhiteSpace(q.Title) ? q.Id : q.Title)
             .ToList();
@@ -93,6 +99,24 @@ public class ResponsesController(
                 "Faltan respuestas obligatorias: " + string.Join(", ", missing));
             return ValidationProblem(ModelState);
         }
+
+        // Numeros, fechas, estrellas y NPS tienen que venir con su formato.
+        var invalid = path
+            .Select(q => (Question: q, Reason: FormLogic.InvalidValueReason(q, request.Answers?.GetValueOrDefault(q.Id))))
+            .Where(x => x.Reason is not null)
+            .Select(x => $"{(string.IsNullOrWhiteSpace(x.Question.Title) ? x.Question.Id : x.Question.Title)} ({x.Reason})")
+            .ToList();
+
+        if (invalid.Count > 0)
+        {
+            ModelState.AddModelError("answers",
+                "Hay respuestas con un formato no valido: " + string.Join(", ", invalid));
+            return ValidationProblem(ModelState);
+        }
+
+        var answers = request.Answers?
+            .Where(pair => visited.Contains(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
 
         // Y los campos de intro marcados como obligatorios tambien.
         var missingFields = form.IntroFields
@@ -110,7 +134,7 @@ public class ResponsesController(
             return ValidationProblem(ModelState);
         }
 
-        var response = store.AddResponse(formId, request.Answers, request.Respondent);
+        var response = store.AddResponse(formId, answers, request.Respondent);
         if (response is null)
         {
             return Problem($"No existe el formulario '{formId}'.", statusCode: StatusCodes.Status404NotFound);

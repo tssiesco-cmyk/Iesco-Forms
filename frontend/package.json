@@ -17,7 +17,8 @@
     "react-dom": "^19.3.0",
     "react-icons": "^5.7.0",
     "react-router-dom": "^7.18.3",
-    "styled-components": "^6.5.3"
+    "styled-components": "^6.5.3",
+    "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

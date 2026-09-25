@@ -14,13 +14,9 @@
 
 import { CHART_COLORS } from "../styles/chartColors";
 import logoUrl from "../assets/logoiescogroup.png";
-
-const TYPE_LABELS = {
-  short_text: "Texto corto",
-  long_text: "Texto largo",
-  single_choice: "Opcion unica",
-  multiple_choice: "Opcion multiple",
-};
+import {
+  TYPE_LABELS, answerText as sharedAnswerText, average, chartQuestion, isChartable, isSingleOption, npsScore,
+} from "./questionTypes";
 
 const hex = (value) => [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
 
@@ -85,23 +81,15 @@ function isAnswered(value) {
 }
 
 /** Texto legible de una respuesta: los ids de opcion pasan a su texto. */
-function answerText(question, value) {
-  if (!isAnswered(value)) return "—";
-
-  if (question.type === "single_choice" || question.type === "multiple_choice") {
-    const byId = Object.fromEntries(question.options.map((o) => [o.id, o.text]));
-    const ids = Array.isArray(value) ? value : [value];
-    return ids.map((id) => byId[id] ?? "(opcion eliminada)").join("; ");
-  }
-
-  return value.toString();
-}
+const answerText = (question, value) => sharedAnswerText(question, value, "—");
 
 /**
  * Conteo por opcion, calculado igual que en la pantalla: el porcentaje es
- * sobre el total de opciones elegidas.
+ * sobre el total de opciones elegidas. Las escalas cuentan cada valor como
+ * una opcion.
  */
-function choiceStats(question, responses) {
+function choiceStats(original, responses) {
+  const question = chartQuestion(original);
   const counts = Object.fromEntries(question.options.map((o) => [o.id, 0]));
 
   for (const r of responses) {
@@ -448,15 +436,26 @@ export async function downloadResultsPdf(form, responses) {
   sectionTitle("Resumen");
 
   form.questions.forEach((question, index) => {
-    const isChoice = question.type === "single_choice" || question.type === "multiple_choice";
+    const isChoice = isChartable(question.type);
+
+    // Promedio y NPS van junto al conteo, en la misma linea del encabezado.
+    const extras = [];
+    const nps = question.type === "nps" ? npsScore(question, responses) : null;
+    if (nps) extras.push(`NPS ${nps.score > 0 ? "+" : ""}${nps.score}`);
+    if (["rating", "nps", "number"].includes(question.type)) {
+      const avg = average(question, responses);
+      if (avg !== null) extras.push(`promedio ${avg.toLocaleString("es-ES", { maximumFractionDigits: 2 })}`);
+    }
+    const withExtras = (text) => [text, ...extras].join(" · ");
 
     if (isChoice) {
       const stats = choiceStats(question, responses);
-      const answered = responses.filter((r) => r.answers?.[question.id]).length;
-      const countText = `${answered} respuestas`;
+      const answered = responses.filter((r) => isAnswered(r.answers?.[question.id])).length;
+      const countText = withExtras(`${answered} respuestas`);
+      const asDonut = isSingleOption(question.type);
 
       const headerHeight = questionHeader(question, index, countText, 0, false);
-      const chartHeight = question.type === "single_choice"
+      const chartHeight = asDonut
         ? Math.max(DONUT, stats.items.length * LEGEND_ROW)
         : stats.items.length * BAR_ROW - 2;
       const cardHeight = CARD_PAD + headerHeight + chartHeight + CARD_PAD;
@@ -466,7 +465,7 @@ export async function downloadResultsPdf(form, responses) {
       questionHeader(question, index, countText, y + CARD_PAD, true);
 
       const chartTop = y + CARD_PAD + headerHeight;
-      if (question.type === "single_choice") drawDonutChart(stats, chartTop);
+      if (asDonut) drawDonutChart(stats, chartTop);
       else drawBarChart(stats, chartTop);
 
       y += cardHeight + 6;
@@ -475,9 +474,9 @@ export async function downloadResultsPdf(form, responses) {
 
     const items = responses
       .filter((r) => isAnswered(r.answers?.[question.id]))
-      .map((r) => ({ text: r.answers[question.id].toString(), date: r.submittedAt, who: respondentName(form, r) }));
+      .map((r) => ({ text: answerText(question, r.answers[question.id]), date: r.submittedAt, who: respondentName(form, r) }));
 
-    const countText = `${items.length} respuestas`;
+    const countText = withExtras(`${items.length} respuestas`);
     const headerHeight = questionHeader(question, index, countText, 0, false);
     const bodyHeight = items.length
       ? items.reduce((sum, item) => sum + textItemHeight(item.text), 0) - 2.5

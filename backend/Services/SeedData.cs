@@ -19,7 +19,7 @@ public static class SeedData
     ///
     /// Lazy y no un inicializador directo: los campos estaticos se inicializan
     /// en orden de declaracion, y las escalas que usan las plantillas
-    /// (Calificacion, Escala0A10, LineasDeServicio...) estan al final del
+    /// (Escala0A10, LineasDeServicio, Desempeno...) estan al final del
     /// archivo. Construir aqui las dejaria en null.
     /// </summary>
     private static readonly Lazy<IReadOnlyList<Template>> _templates =
@@ -180,7 +180,7 @@ public static class SeedData
         },
     };
 
-    public static List<Template> CreateTemplates() =>
+    public static List<Template> CreateTemplates() => ResolverSaltos(
     [
         new Template
         {
@@ -202,7 +202,7 @@ public static class SeedData
             [
                 Choice("¿Qué tan satisfecho está con el servicio?", true, Escala0A10),
                 Choice("¿Cuál es su nivel de satisfacción con el equipo profesional asignado para el servicio?", true, Escala0A10),
-                Choice("¿El servicio fue ejecutado dentro del plazo acordado?", true, "Sí", "No"),
+                YesNo("¿El servicio fue ejecutado dentro del plazo acordado?", true),
                 ShortText("¿Alguna recomendación para la mejora continua de nuestros servicios?", false),
                 ShortText("¿En qué otra línea de servicio de IESCO se encuentra interesado?", false),
                 ShortText("Nos gustaría mucho recibir cualquier comentario específico sobre nuestro servicio que podamos utilizar en el futuro como testimonios de nuestros clientes en nuestra página web o documentos comerciales (“what our customers say”).", false),
@@ -222,18 +222,20 @@ public static class SeedData
             CoverTitle = "¿Nos recomendaría a un colega del sector?",
             CoverSubtitle = "Una sola pregunta define todo lo demás",
             CoverWelcome =
-                "Son cinco preguntas y toma menos de dos minutos.\n" +
+                "Son preguntas cortas y toma menos de tres minutos.\n" +
                 "Su respuesta nos dice qué estamos haciendo bien y qué tenemos que corregir.",
             Questions =
             [
-                Choice("Del 0 al 10, que tan probable es que nos recomiendes a un amigo o colega?", true, "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"),
+                Nps("Del 0 al 10, que tan probable es que nos recomiendes a un amigo o colega?", true),
                 Choice("Cual es la razon principal de tu puntuacion?", true, "Calidad del producto o servicio", "Atencion al cliente", "Precio", "Facilidad de uso", "Cumplimiento de lo prometido", "Otro"),
                 LongText("Que tendriamos que cambiar para que nos des una puntuacion mas alta?", false),
-                Choice("Hace cuanto eres cliente nuestro?", true, "Menos de 3 meses", "De 3 a 12 meses", "De 1 a 3 anos", "Mas de 3 anos"),
-                Choice("Con que frecuencia usas nuestro producto o servicio?", true, Frecuencia),
-                Choice("Que tan facil es trabajar con nosotros?", true, "Muy facil", "Facil", "Ni facil ni dificil", "Dificil", "Muy dificil"),
+                Dropdown("Hace cuanto eres cliente nuestro?", true, "Menos de 3 meses", "De 3 a 12 meses", "De 1 a 3 anos", "Mas de 3 anos"),
+                Dropdown("Con que frecuencia usas nuestro producto o servicio?", true, Frecuencia),
+                Rating("Que tan facil es trabajar con nosotros? (1 = muy dificil, 5 = muy facil)", true),
                 Choice("Cumplimos con lo que esperabas al contratarnos?", true, "Superamos lo esperado", "Cumplimos", "Cumplimos en parte", "No cumplimos"),
-                Choice("Has considerado cambiarte a otro proveedor en el ultimo ano?", true, "No", "Lo he pensado", "Si, estoy evaluando opciones"),
+                Choice("Has considerado cambiarte a otro proveedor en el ultimo ano?", true, "No", "Lo he pensado", "Si, estoy evaluando opciones")
+                    .SaltaSi("No", "En que deberiamos enfocarnos primero?"),
+                LongText("Que te haria quedarte con nosotros?", false),
                 MultiChoice("En que deberiamos enfocarnos primero?", false, "Mejorar la calidad", "Responder mas rapido", "Bajar precios", "Nuevas funcionalidades", "Mejor comunicacion", "Capacitacion"),
                 LongText("Hay algo mas que quieras contarnos?", false),
             ],
@@ -256,15 +258,16 @@ public static class SeedData
             Questions =
             [
                 Choice("En que calidad participaste?", true, "Asistente", "Ponente", "Patrocinador", "Organizador", "Prensa"),
-                Choice("Como calificarias el evento en general?", true, Calificacion),
+                Rating("Como calificarias el evento en general?", true),
                 Choice("El contenido cumplio con tus expectativas?", true, "Supero mis expectativas", "Las cumplio", "Las cumplio en parte", "No las cumplio"),
-                Choice("Como calificas la calidad de los ponentes?", true, Calificacion),
+                Rating("Como calificas la calidad de los ponentes?", true),
                 Choice("El contenido fue relevante para tu trabajo?", true, Acuerdo),
                 MultiChoice("Que actividades te parecieron mas utiles?", false, "Conferencia principal", "Talleres practicos", "Paneles de expertos", "Networking", "Demostraciones", "Stands"),
-                Choice("Como calificas la organizacion y logistica?", true, Calificacion),
-                Choice("Como calificas el lugar y las instalaciones?", true, Calificacion),
+                Rating("Como calificas la organizacion y logistica?", true),
+                Rating("Como calificas el lugar y las instalaciones?", true),
                 Choice("La duracion del evento fue adecuada?", true, "Demasiado corto", "Adecuada", "Demasiado largo"),
-                Choice("Como te enteraste del evento?", true, "Correo electronico", "Redes sociales", "Sitio web", "Recomendacion", "Mi empresa", "Otro"),
+                Dropdown("Como te enteraste del evento?", true, "Correo electronico", "Redes sociales", "Sitio web", "Recomendacion", "Mi empresa", "Otro"),
+                Nps("Del 0 al 10, que tan probable es que recomiendes este evento a un colega?", true),
                 Choice("Asistirias a una proxima edicion?", true, Probabilidad),
                 MultiChoice("Sobre que temas te gustaria aprender en proximos eventos?", false, "Tecnologia", "Gestion de proyectos", "Seguridad", "Liderazgo", "Innovacion", "Normativa"),
                 LongText("Que fue lo mejor del evento?", false),
@@ -296,9 +299,10 @@ public static class SeedData
                 Choice("Que tan urgente es tu solicitud?", true, "Alta: necesito respuesta hoy", "Media: en los proximos dias", "Baja: solo informativa"),
                 ShortText("Asunto", true),
                 LongText("Describe tu consulta con el mayor detalle posible", true),
-                Choice("Como prefieres que te contactemos?", true, "Correo electronico", "Llamada telefonica", "WhatsApp", "Reunion virtual"),
+                Choice("Como prefieres que te contactemos?", true, "Correo electronico", "Llamada telefonica", "WhatsApp", "Reunion virtual")
+                    .SaltaSi("Correo electronico", "Como nos conociste?"),
                 Choice("En que horario prefieres que te contactemos?", false, "Manana (8:00 - 12:00)", "Tarde (12:00 - 18:00)", "Cualquier horario"),
-                Choice("Como nos conociste?", false, "Buscador (Google)", "Redes sociales", "Recomendacion", "Evento", "Ya soy cliente", "Otro"),
+                Dropdown("Como nos conociste?", false, "Buscador (Google)", "Redes sociales", "Recomendacion", "Evento", "Ya soy cliente", "Otro"),
                 Choice("Aceptas que usemos tus datos para responder a esta consulta?", true, "Si, acepto"),
             ],
         },
@@ -325,16 +329,19 @@ public static class SeedData
                 ShortText("Telefono", true),
                 ShortText("Empresa u organizacion", false),
                 ShortText("Cargo", false),
-                Choice("Sector de tu organizacion", false, "Energia", "Construccion", "Industria", "Servicios", "Sector publico", "Educacion", "Otro"),
+                Dropdown("Sector de tu organizacion", false, "Energia", "Construccion", "Industria", "Servicios", "Sector publico", "Educacion", "Otro"),
                 Choice("Tipo de entrada", true, "General", "VIP", "Estudiante", "Invitado", "Prensa"),
-                Choice("Modalidad de asistencia", true, "Presencial", "Virtual"),
                 MultiChoice("Sesiones a las que asistiras", false, "Conferencia principal", "Taller A", "Taller B", "Panel de expertos", "Networking", "Visita tecnica"),
+                // Quien asiste en linea no come, no se traslada ni recibe polo: se
+                // salta todo lo que solo aplica en el lugar.
+                Choice("Modalidad de asistencia", true, "Presencial", "Virtual")
+                    .SaltaSi("Virtual", "Como te enteraste del evento?"),
                 Choice("Tienes alguna restriccion alimentaria?", true, "Ninguna", "Vegetariano", "Vegano", "Sin gluten", "Otra"),
                 Choice("Necesitas algun requerimiento de accesibilidad?", true, "No", "Movilidad reducida", "Interprete", "Otro"),
-                Choice("Talla de polo (si aplica)", false, "S", "M", "L", "XL", "XXL"),
+                Dropdown("Talla de polo (si aplica)", false, "S", "M", "L", "XL", "XXL"),
                 ShortText("Contacto de emergencia (nombre y telefono)", false),
-                Choice("Como te enteraste del evento?", false, "Correo electronico", "Redes sociales", "Sitio web", "Recomendacion", "Mi empresa", "Otro"),
-                Choice("Autorizas el uso de fotos y videos del evento en los que aparezcas?", true, "Si", "No"),
+                Dropdown("Como te enteraste del evento?", false, "Correo electronico", "Redes sociales", "Sitio web", "Recomendacion", "Mi empresa", "Otro"),
+                YesNo("Autorizas el uso de fotos y videos del evento en los que aparezcas?", true),
             ],
         },
         new Template
@@ -356,21 +363,24 @@ public static class SeedData
             [
                 ShortText("Nombre completo", true),
                 ShortText("Documento de identidad", true),
+                Date("Fecha de nacimiento", false),
                 ShortText("Correo electronico", true),
                 ShortText("Telefono", true),
                 ShortText("Ciudad de residencia", true),
                 ShortText("Puesto al que postulas", true),
-                Choice("Area de interes", true, "Ingenieria", "Operaciones", "Administracion y finanzas", "Recursos humanos", "Comercial", "Tecnologia", "Otro"),
-                Choice("Nivel de estudios alcanzado", true, "Secundaria", "Tecnico", "Universitario en curso", "Bachiller", "Titulado", "Maestria o superior"),
+                Dropdown("Area de interes", true, "Ingenieria", "Operaciones", "Administracion y finanzas", "Recursos humanos", "Comercial", "Tecnologia", "Otro"),
+                Dropdown("Nivel de estudios alcanzado", true, "Secundaria", "Tecnico", "Universitario en curso", "Bachiller", "Titulado", "Maestria o superior")
+                    .SaltaSi("Secundaria", "Anos de experiencia en el puesto"),
                 ShortText("Carrera o especialidad", false),
-                Choice("Anos de experiencia en el puesto", true, "Sin experiencia", "Menos de 1 ano", "1 a 3 anos", "3 a 5 anos", "5 a 10 anos", "Mas de 10 anos"),
+                Choice("Anos de experiencia en el puesto", true, "Sin experiencia", "Menos de 1 ano", "1 a 3 anos", "3 a 5 anos", "5 a 10 anos", "Mas de 10 anos")
+                    .SaltaSi("Sin experiencia", "Idiomas que manejas a nivel intermedio o superior"),
                 ShortText("Ultimo empleador y cargo", false),
                 MultiChoice("Idiomas que manejas a nivel intermedio o superior", false, "Espanol", "Ingles", "Portugues", "Frances", "Otro"),
                 MultiChoice("Herramientas que dominas", false, "Excel avanzado", "AutoCAD", "ERP / SAP", "Power BI", "MS Project", "Ninguna de estas"),
                 Choice("Disponibilidad para empezar", true, "Inmediata", "En 15 dias", "En 1 mes", "Mas de 1 mes"),
                 Choice("Tipo de jornada que buscas", true, "Tiempo completo", "Medio tiempo", "Por proyecto", "Practicas"),
                 Choice("Tienes disponibilidad para viajar?", true, "Si", "Ocasionalmente", "No"),
-                ShortText("Expectativa salarial mensual", false),
+                Number("Expectativa salarial mensual (solo el monto)", false),
                 ShortText("Enlace a tu CV o perfil de LinkedIn", true),
                 LongText("Por que te interesa trabajar con nosotros?", true),
                 Choice("Declaro que la informacion proporcionada es veraz", true, "Si, lo declaro"),
@@ -405,7 +415,7 @@ public static class SeedData
                 Choice("8. Recibes un correo sospechoso que pide tus credenciales. Que haces?", true, "Respondo con mis datos", "Hago clic para verificar", "Lo reporto a TI y no abro enlaces", "Lo reenvio a mis companeros"),
                 MultiChoice("9. Que informacion se considera confidencial? (elige todas)", true, "Datos personales de clientes", "Contratos", "El menu del comedor", "Informacion financiera", "Planos de proyectos"),
                 Choice("10. A quien debes acudir ante un conflicto de intereses?", true, "A nadie", "A tu jefe directo o al area de cumplimiento", "Solo a un companero", "Al cliente"),
-                Choice("Que tan claro fue el contenido de la induccion?", true, "Muy claro", "Claro", "Poco claro", "Nada claro"),
+                Rating("Que tan claro fue el contenido de la induccion?", true),
                 LongText("Que tema te gustaria reforzar?", false),
             ],
         },
@@ -430,7 +440,8 @@ public static class SeedData
                 ShortText("Cargo", true),
                 ShortText("Area o departamento", true),
                 ShortText("Nombre del evaluador", true),
-                Choice("Periodo evaluado", true, "Primer semestre", "Segundo semestre", "Anual", "Fin de periodo de prueba"),
+                Date("Fecha de la evaluacion", true),
+                Dropdown("Periodo evaluado", true, "Primer semestre", "Segundo semestre", "Anual", "Fin de periodo de prueba"),
                 Choice("Cumplimiento de objetivos del periodo", true, Desempeno),
                 Choice("Calidad del trabajo entregado", true, Desempeno),
                 Choice("Productividad y cumplimiento de plazos", true, Desempeno),
@@ -446,7 +457,9 @@ public static class SeedData
                 Choice("Calificacion global del desempeno", true, Desempeno),
                 LongText("Logros destacados del periodo", false),
                 LongText("Plan de desarrollo: objetivos y capacitaciones para el proximo periodo", true),
-                Choice("El colaborador reviso y converso esta evaluacion con el evaluador?", true, "Si", "No, pendiente"),
+                // Sin conversacion todavia no hay comentarios del colaborador que anotar.
+                YesNo("El colaborador reviso y converso esta evaluacion con el evaluador?", true)
+                    .SaltaSi("No", Terminar),
                 LongText("Comentarios del colaborador", false),
             ],
         },
@@ -465,15 +478,18 @@ public static class SeedData
             Category = "Evaluacion",
             Questions =
             [
-                Choice("Cual es tu rango de edad?", true, "18-24", "25-34", "35-44", "45-54", "55-64", "65 o mas"),
+                Dropdown("Cual es tu rango de edad?", true, "18-24", "25-34", "35-44", "45-54", "55-64", "65 o mas"),
                 Choice("Genero", false, "Femenino", "Masculino", "Otro", "Prefiero no decirlo"),
                 ShortText("Ciudad de residencia", true),
                 Choice("Nivel de estudios", false, "Secundaria", "Tecnico", "Universitario", "Posgrado"),
-                Choice("Situacion laboral", true, "Empleado", "Independiente", "Empresario", "Estudiante", "Sin empleo", "Jubilado"),
+                Dropdown("Situacion laboral", true, "Empleado", "Independiente", "Empresario", "Estudiante", "Sin empleo", "Jubilado"),
                 Choice("Tamano de la empresa donde trabajas", false, "1 a 10 personas", "11 a 50", "51 a 250", "Mas de 250", "No aplica"),
-                Choice("Con que frecuencia usas productos o servicios como el nuestro?", true, Frecuencia),
-                MultiChoice("Que marcas o proveedores usas actualmente?", false, "Proveedor A", "Proveedor B", "Proveedor C", "Ninguno", "Otro"),
-                Choice("Que tan satisfecho estas con tu proveedor actual?", true, Satisfaccion),
+                Dropdown("Con que frecuencia usas productos o servicios como el nuestro?", true, Frecuencia),
+                // Quien no tiene proveedor no puede calificarlo.
+                YesNo("Trabajas actualmente con algun proveedor de este tipo de servicio?", true)
+                    .SaltaSi("No", "Que factores consideras al elegir un proveedor?"),
+                MultiChoice("Que marcas o proveedores usas actualmente?", false, "Proveedor A", "Proveedor B", "Proveedor C", "Otro"),
+                Rating("Que tan satisfecho estas con tu proveedor actual?", true),
                 MultiChoice("Que factores consideras al elegir un proveedor?", true, "Precio", "Calidad", "Marca", "Recomendaciones", "Rapidez de entrega", "Soporte postventa", "Garantia"),
                 Choice("Cual es el factor MAS importante para ti?", true, "Precio", "Calidad", "Marca", "Recomendaciones", "Rapidez de entrega", "Soporte postventa", "Garantia"),
                 MultiChoice("Por que medios buscas informacion antes de comprar?", false, "Buscadores", "Redes sociales", "Recomendaciones", "Ferias y eventos", "Vendedores", "Sitios de comparacion"),
@@ -482,10 +498,12 @@ public static class SeedData
                 Choice("Que tan probable es que pruebes un nuevo proveedor en los proximos 6 meses?", true, Probabilidad),
                 LongText("Que problema te gustaria que resolviera un producto o servicio ideal?", false),
                 LongText("Que caracteristicas no pueden faltar?", false),
-                Choice("Podemos contactarte para una entrevista breve?", true, "Si", "No"),
+                YesNo("Podemos contactarte para una entrevista breve?", true)
+                    .SaltaSi("No", Terminar),
+                ShortText("Dejanos tu correo o telefono para coordinar la entrevista", true),
             ],
         },
-    ];
+    ]);
 
     // Escalas repetidas. Van en un solo sitio para que todas las plantillas
     // usen exactamente las mismas palabras y los resultados se puedan comparar.
@@ -520,8 +538,6 @@ public static class SeedData
         "Otros",
     ];
 
-    private static readonly string[] Calificacion = ["Excelente", "Muy bueno", "Bueno", "Regular", "Malo"];
-    private static readonly string[] Satisfaccion = ["Muy satisfecho", "Satisfecho", "Neutral", "Insatisfecho", "Muy insatisfecho"];
     private static readonly string[] Acuerdo = ["Totalmente de acuerdo", "De acuerdo", "Ni de acuerdo ni en desacuerdo", "En desacuerdo", "Totalmente en desacuerdo"];
     private static readonly string[] Probabilidad = ["Muy probable", "Probable", "No estoy seguro", "Poco probable", "Nada probable"];
     private static readonly string[] Frecuencia = ["Diariamente", "Varias veces por semana", "Semanalmente", "Mensualmente", "Rara vez", "Nunca"];
@@ -538,4 +554,73 @@ public static class SeedData
 
     private static TemplateQuestion MultiChoice(string title, bool required, params string[] options) =>
         new() { Type = QuestionType.MultipleChoice, Title = title, Required = required, Options = [.. options] };
+
+    private static TemplateQuestion Nps(string title, bool required) =>
+        new() { Type = QuestionType.Nps, Title = title, Required = required };
+
+    private static TemplateQuestion Dropdown(string title, bool required, params string[] options) =>
+        new() { Type = QuestionType.Dropdown, Title = title, Required = required, Options = [.. options] };
+
+    private static TemplateQuestion YesNo(string title, bool required) =>
+        new() { Type = QuestionType.YesNo, Title = title, Required = required, Options = ["Sí", "No"] };
+
+    private static TemplateQuestion Rating(string title, bool required, int stars = QuestionType.DefaultScale) =>
+        new() { Type = QuestionType.Rating, Title = title, Required = required, ScaleMax = stars };
+
+    private static TemplateQuestion Number(string title, bool required) =>
+        new() { Type = QuestionType.Number, Title = title, Required = required };
+
+    private static TemplateQuestion Date(string title, bool required) =>
+        new() { Type = QuestionType.Date, Title = title, Required = required };
+
+    // --- Logica condicional ---
+
+    /// <summary>Destino de <see cref="SaltaSi"/> que termina el formulario.</summary>
+    private const string Terminar = QuestionJump.End;
+
+    /// <summary>
+    /// Si se elige <paramref name="opcion"/>, saltar a la pregunta cuyo titulo es
+    /// <paramref name="destino"/> (o <see cref="Terminar"/>). Se apunta por titulo
+    /// y no por posicion para que agregar o mover preguntas no desvie el salto;
+    /// <see cref="ResolverSaltos"/> lo convierte en posicion al final.
+    /// </summary>
+    private static TemplateQuestion SaltaSi(this TemplateQuestion pregunta, string opcion, string destino)
+    {
+        var indice = pregunta.Options.IndexOf(opcion);
+        if (indice < 0)
+            throw new InvalidOperationException($"'{pregunta.Title}' no tiene la opcion '{opcion}'.");
+
+        while (pregunta.OptionJumps.Count < pregunta.Options.Count) pregunta.OptionJumps.Add(string.Empty);
+        pregunta.OptionJumps[indice] = destino == Terminar ? Terminar : "@" + destino;
+        return pregunta;
+    }
+
+    /// <summary>
+    /// Pasa los saltos por titulo al formato de plantilla (la posicion de la
+    /// pregunta destino). Si un titulo no existe o queda hacia atras, falla al
+    /// arrancar en vez de dejar una plantilla que no salta.
+    /// </summary>
+    private static List<Template> ResolverSaltos(List<Template> plantillas)
+    {
+        foreach (var plantilla in plantillas)
+        {
+            for (var origen = 0; origen < plantilla.Questions.Count; origen++)
+            {
+                var pregunta = plantilla.Questions[origen];
+                pregunta.OptionJumps = [.. pregunta.OptionJumps.Select(salto =>
+                {
+                    if (!salto.StartsWith('@')) return salto;
+
+                    var destino = plantilla.Questions.FindIndex(q => q.Title == salto[1..]);
+                    if (destino <= origen)
+                        throw new InvalidOperationException(
+                            $"Plantilla '{plantilla.Id}': el salto de '{pregunta.Title}' apunta a '{salto[1..]}', que no existe o esta antes.");
+
+                    return destino.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                })];
+            }
+        }
+
+        return plantillas;
+    }
 }

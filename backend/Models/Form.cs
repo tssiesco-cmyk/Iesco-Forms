@@ -44,15 +44,50 @@ public static class QuestionType
     public const string SingleChoice = "single_choice";
     public const string MultipleChoice = "multiple_choice";
 
+    /// <summary>Opcion unica en una lista desplegable. Se guarda igual que SingleChoice.</summary>
+    public const string Dropdown = "dropdown";
+
+    /// <summary>Si / No. Nace con esas dos opciones y se guarda igual que SingleChoice.</summary>
+    public const string YesNo = "yes_no";
+
+    /// <summary>Estrellas de 1 a <see cref="Question.ScaleMax"/>.</summary>
+    public const string Rating = "rating";
+
+    /// <summary>Net Promoter Score: de 0 a 10.</summary>
+    public const string Nps = "nps";
+
+    public const string Number = "number";
+
+    /// <summary>Fecha en formato yyyy-MM-dd.</summary>
+    public const string Date = "date";
+
     public static bool IsValid(string? type) =>
-        type is ShortText or LongText or SingleChoice or MultipleChoice;
+        type is ShortText or LongText or SingleChoice or MultipleChoice
+            or Dropdown or YesNo or Rating or Nps or Number or Date;
 
     public static bool HasOptions(string type) =>
-        type is SingleChoice or MultipleChoice;
+        type is SingleChoice or MultipleChoice or Dropdown or YesNo;
+
+    /// <summary>Se elige una sola opcion. Son las que admiten saltos por opcion.</summary>
+    public static bool IsSingleOption(string type) =>
+        type is SingleChoice or Dropdown or YesNo;
 
     /// <summary>Tipos donde quien responde escribe libremente.</summary>
     public static bool IsText(string type) =>
         type is ShortText or LongText;
+
+    public const int MinScale = 3;
+    public const int MaxScale = 10;
+    public const int DefaultScale = 5;
+}
+
+/// <summary>
+/// A donde lleva un salto de logica: vacio es "a la siguiente", <see cref="End"/>
+/// termina el formulario y cualquier otro valor es el id de una pregunta posterior.
+/// </summary>
+public static class QuestionJump
+{
+    public const string End = "end";
 }
 
 /// <summary>
@@ -208,6 +243,15 @@ public class Question
     /// </summary>
     public string BackgroundImage { get; set; } = string.Empty;
 
+    /// <summary>
+    /// A donde ir despues de esta pregunta. Ver <see cref="QuestionJump"/>. Un
+    /// salto de la opcion elegida manda sobre este.
+    /// </summary>
+    public string JumpTo { get; set; } = string.Empty;
+
+    /// <summary>Cuantas estrellas tiene una pregunta de tipo rating. Null en los demas tipos.</summary>
+    public int? ScaleMax { get; set; }
+
     public List<QuestionOption> Options { get; set; } = [];
 }
 
@@ -215,6 +259,9 @@ public class QuestionOption
 {
     public string Id { get; set; } = string.Empty;
     public string Text { get; set; } = string.Empty;
+
+    /// <summary>A donde lleva elegir esta opcion. Solo en preguntas de opcion unica.</summary>
+    public string JumpTo { get; set; } = string.Empty;
 }
 
 public class IntroField

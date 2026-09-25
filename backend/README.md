@@ -81,8 +81,19 @@ leer: `true` si paso `closesAt` o si `responseCount` llego a `maxResponses`.
 | PATCH | `/api/forms/{id}/questions/{questionId}/options/{optionId}` |
 | DELETE | `/api/forms/{id}/questions/{questionId}/options/{optionId}` |
 
-`type`: `short_text`, `long_text`, `single_choice`, `multiple_choice`.
-Las de opcion nacen con dos opciones; las de texto no admiten opciones.
+`type`: `short_text`, `long_text`, `single_choice`, `multiple_choice`,
+`dropdown`, `yes_no`, `rating`, `nps`, `number`, `date`.
+Las de opcion nacen con dos opciones (`yes_no` con "Sí" y "No"); las demas no
+admiten opciones. `rating` tiene `scaleMax` (de 3 a 10 estrellas, 5 por defecto).
+Las respuestas de `dropdown` y `yes_no` son el id de la opcion, como en
+`single_choice`; las de `rating`, `nps`, `number` y `date` (`yyyy-MM-dd`) van
+como texto.
+
+**Logica condicional.** El PATCH de la pregunta acepta `jumpTo` y el de la opcion
+tambien: `""` quita el salto, `"end"` termina el formulario y cualquier otro
+valor es el id de una pregunta. El de la opcion elegida (solo en `single_choice`,
+`dropdown` y `yes_no`) manda sobre el de la pregunta. Un salto hacia atras se
+ignora al responder. Requiere `Database/12_logica_y_tipos_de_pregunta.sql`.
 
 ### Campos del respondedor
 
@@ -104,7 +115,10 @@ Las de opcion nacen con dos opciones; las de texto no admiten opciones.
 
 Al enviar se valida que el formulario este publicado (si no, `409`), que no haya
 cerrado por fecha o cupo (si no, `410`) y que vengan las preguntas y campos
-obligatorios (si no, `400`). Se admiten 60 envios por minuto por IP (`429`).
+obligatorios (si no, `400`). Con logica condicional solo se exigen y se guardan
+las preguntas del camino que dejan las respuestas (`Services/FormLogic.cs`, que
+decide igual que `frontend/src/services/questionTypes.js`). Numeros, fechas,
+estrellas y NPS fuera de formato tambien dan `400`. Se admiten 60 envios por minuto por IP (`429`).
 El login tiene su propio limite: 10 intentos cada 5 minutos por IP.
 
 `answers` va indexado por id de pregunta: cadena para texto y opcion unica (el id

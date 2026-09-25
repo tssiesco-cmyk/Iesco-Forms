@@ -149,12 +149,16 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
             });
         }
 
+        // Los ids van primero: los saltos de la plantilla apuntan por posicion y
+        // una pregunta puede saltar a otra que todavia no se ha creado.
+        var idsNuevos = plantilla.Questions.Select(_ => NewId()).ToList();
+
         var posicion = 0;
         foreach (var pregunta in plantilla.Questions)
         {
             var nueva = new QuestionRow
             {
-                Id = NewId(),
+                Id = idsNuevos[posicion],
                 FormId = fila.Id,
                 Position = posicion++,
                 Type = pregunta.Type,
@@ -163,6 +167,8 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 Required = pregunta.Required,
                 TextCase = QuestionTextCase.IsValid(pregunta.TextCase) ? pregunta.TextCase : QuestionTextCase.Normal,
                 BackgroundImage = pregunta.BackgroundImage,
+                JumpTo = FormLogic.JumpFromTemplate(pregunta.JumpTo, idsNuevos),
+                ScaleMax = pregunta.Type == QuestionType.Rating ? pregunta.ScaleMax ?? QuestionType.DefaultScale : null,
             };
 
             var posicionOpcion = 0;
@@ -172,6 +178,7 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 {
                     Id = NewId(),
                     QuestionId = nueva.Id,
+                    JumpTo = FormLogic.JumpFromTemplate(pregunta.OptionJumps.ElementAtOrDefault(posicionOpcion), idsNuevos),
                     Position = posicionOpcion++,
                     Text = opcion,
                 });
@@ -190,6 +197,8 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
     {
         var form = GetForm(formId);
         if (form is null) return null;
+
+        var ids = form.Questions.Select(q => q.Id).ToList();
 
         return new Template
         {
@@ -220,7 +229,10 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 Required = q.Required,
                 TextCase = q.TextCase,
                 BackgroundImage = q.BackgroundImage,
+                ScaleMax = q.ScaleMax,
+                JumpTo = FormLogic.JumpToTemplate(q.JumpTo, ids),
                 Options = [.. q.Options.Select(o => o.Text)],
+                OptionJumps = [.. q.Options.Select(o => FormLogic.JumpToTemplate(o.JumpTo, ids))],
             })],
         };
     }
@@ -442,9 +454,15 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
             Position = SiguientePosicionPregunta(formId),
             Type = type,
             TextCase = QuestionTextCase.Normal,
+            ScaleMax = type == QuestionType.Rating ? QuestionType.DefaultScale : null,
         };
 
-        if (QuestionType.HasOptions(type))
+        if (type == QuestionType.YesNo)
+        {
+            fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 0, Text = "Sí" });
+            fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 1, Text = "No" });
+        }
+        else if (QuestionType.HasOptions(type))
         {
             fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 0, Text = "Opcion 1" });
             fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 1, Text = "Opcion 2" });
@@ -484,6 +502,10 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
             Description = original.Description,
             Required = original.Required,
             TextCase = original.TextCase,
+            ScaleMax = original.ScaleMax,
+            // Los saltos apuntan a preguntas del mismo formulario, asi que sirven
+            // tal cual. Uno que ahora quede hacia atras se ignora al responder.
+            JumpTo = original.JumpTo,
             // BackgroundImage no se copia: seria el mismo archivo en disco y al
             // borrar una copia la otra quedaria apuntando a una ruta muerta.
         };
@@ -497,6 +519,7 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 QuestionId = copia.Id,
                 Position = posicion++,
                 Text = opcion.Text,
+                JumpTo = opcion.JumpTo,
             });
         }
 
@@ -506,7 +529,7 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         return ToModel(copia);
     }
 
-    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase)
+    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax)
     {
         var fila = db.Questions
             .Include(q => q.Options.OrderBy(o => o.Position))
@@ -518,6 +541,9 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         if (description is not null) fila.Description = description;
         if (required.HasValue) fila.Required = required.Value;
         if (textCase is not null) fila.TextCase = textCase;
+        // Cadena vacia quita el salto; null no lo toca.
+        if (jumpTo is not null) fila.JumpTo = jumpTo.Length == 0 ? null : jumpTo;
+        if (scaleMax.HasValue && fila.Type == QuestionType.Rating) fila.ScaleMax = scaleMax;
 
         db.SaveChanges();
         return ToModel(fila);
@@ -535,6 +561,18 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         foreach (var opcion in db.QuestionOptions.Where(o => o.QuestionId == questionId))
         {
             opcion.DeletedAt = ahora;
+        }
+
+        // Los saltos que llevaban a esta pregunta vuelven a "la siguiente".
+        foreach (var origen in db.Questions.Where(q => q.FormId == formId && q.JumpTo == questionId))
+        {
+            origen.JumpTo = null;
+        }
+
+        foreach (var opcion in db.QuestionOptions.Where(o => o.JumpTo == questionId
+            && db.Questions.Any(q => q.Id == o.QuestionId && q.FormId == formId)))
+        {
+            opcion.JumpTo = null;
         }
 
         db.SaveChanges();
@@ -603,13 +641,14 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         return new QuestionOption { Id = fila.Id, Text = fila.Text };
     }
 
-    public bool UpdateOption(string formId, string questionId, string optionId, string? text)
+    public bool UpdateOption(string formId, string questionId, string optionId, string? text, string? jumpTo)
     {
         var fila = db.QuestionOptions.FirstOrDefault(o => o.Id == optionId && o.QuestionId == questionId);
         if (fila is null) return false;
         if (!db.Questions.Any(q => q.Id == questionId && q.FormId == formId)) return false;
 
         if (text is not null) fila.Text = text;
+        if (jumpTo is not null) fila.JumpTo = jumpTo.Length == 0 ? null : jumpTo;
 
         db.SaveChanges();
         return true;
@@ -787,9 +826,14 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 QuestionId = preguntaId,
             };
 
-            if (QuestionType.IsText(pregunta.Type))
+            // Todo lo que no es de opciones (texto, numero, fecha, estrellas, NPS)
+            // se guarda como texto; el formato de mayusculas solo aplica al texto libre.
+            if (!QuestionType.HasOptions(pregunta.Type))
             {
-                detalle.TextValue = AplicarFormato(TextoDe(valor), pregunta.TextCase);
+                var texto = TextoDe(valor);
+                detalle.TextValue = QuestionType.IsText(pregunta.Type)
+                    ? AplicarFormato(texto, pregunta.TextCase)
+                    : texto.Trim();
             }
             else
             {
@@ -908,8 +952,10 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         Required = fila.Required,
         TextCase = fila.TextCase,
         BackgroundImage = fila.BackgroundImage,
+        JumpTo = fila.JumpTo ?? string.Empty,
+        ScaleMax = fila.ScaleMax,
         Options = [.. fila.Options.OrderBy(o => o.Position)
-            .Select(o => new QuestionOption { Id = o.Id, Text = o.Text })],
+            .Select(o => new QuestionOption { Id = o.Id, Text = o.Text, JumpTo = o.JumpTo ?? string.Empty })],
     };
 
     private static IntroField ToModel(IntroFieldRow fila) => new()
@@ -940,16 +986,12 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         {
             var tipo = tiposPorPregunta.GetValueOrDefault(detalle.QuestionId, QuestionType.ShortText);
 
-            respuesta.Answers[detalle.QuestionId] = tipo switch
-            {
-                QuestionType.MultipleChoice =>
-                    new JsonArray([.. detalle.SelectedOptions.Select(o => (JsonNode?)JsonValue.Create(o.OptionId))]),
-
-                QuestionType.SingleChoice =>
-                    JsonValue.Create(detalle.SelectedOptions.FirstOrDefault()?.OptionId ?? string.Empty),
-
-                _ => JsonValue.Create(detalle.TextValue ?? string.Empty),
-            };
+            respuesta.Answers[detalle.QuestionId] =
+                tipo == QuestionType.MultipleChoice
+                    ? new JsonArray([.. detalle.SelectedOptions.Select(o => (JsonNode?)JsonValue.Create(o.OptionId))])
+                : QuestionType.IsSingleOption(tipo)
+                    ? JsonValue.Create(detalle.SelectedOptions.FirstOrDefault()?.OptionId ?? string.Empty)
+                : JsonValue.Create(detalle.TextValue ?? string.Empty);
         }
 
         return respuesta;

@@ -156,13 +156,23 @@ CREATE TABLE dbo.Questions
 
     BackgroundImage NVARCHAR(400)  NOT NULL CONSTRAINT DF_Questions_BackgroundImage DEFAULT '',
 
+    -- Logica: NULL (a la siguiente), 'end' (terminar) o el id de otra pregunta.
+    -- Sin FK: 'end' no es una pregunta. Ver 12_logica_y_tipos_de_pregunta.sql.
+    JumpTo          VARCHAR(36)    NULL,
+
+    -- Estrellas de las preguntas rating; NULL en los demas tipos.
+    ScaleMax        INT            NULL,
+
     -- Borrado logico: una pregunta con respuestas nunca se borra de verdad, o
     -- las respuestas historicas quedarian apuntando a nada.
     DeletedAt       DATETIMEOFFSET NULL,
 
     RowVersion      ROWVERSION     NOT NULL,
 
-    CONSTRAINT CK_Questions_Type     CHECK (Type IN ('short_text', 'long_text', 'single_choice', 'multiple_choice')),
+    CONSTRAINT CK_Questions_Type     CHECK (Type IN (
+        'short_text', 'long_text', 'single_choice', 'multiple_choice',
+        'dropdown', 'yes_no', 'rating', 'nps', 'number', 'date')),
+    CONSTRAINT CK_Questions_ScaleMax CHECK (ScaleMax BETWEEN 3 AND 10),
     CONSTRAINT CK_Questions_TextCase CHECK (TextCase IN ('normal', 'upper', 'lower')),
     CONSTRAINT FK_Questions_Form     FOREIGN KEY (FormId) REFERENCES dbo.Forms (Id) ON DELETE CASCADE
 );
@@ -180,6 +190,10 @@ CREATE TABLE dbo.QuestionOptions
     QuestionId VARCHAR(36)    NOT NULL,
     Position   INT            NOT NULL CONSTRAINT DF_QuestionOptions_Position DEFAULT 0,
     [Text]     NVARCHAR(500)  NOT NULL CONSTRAINT DF_QuestionOptions_Text     DEFAULT '',
+
+    -- Salto al elegir esta opcion. Mismos valores que Questions.JumpTo.
+    JumpTo     VARCHAR(36)    NULL,
+
     DeletedAt  DATETIMEOFFSET NULL,
 
     CONSTRAINT FK_QuestionOptions_Question FOREIGN KEY (QuestionId) REFERENCES dbo.Questions (Id) ON DELETE CASCADE

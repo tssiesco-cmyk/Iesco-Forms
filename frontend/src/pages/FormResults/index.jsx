@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { downloadResultsPdf } from "../../services/resultsPdf";
+import { downloadResultsCsv, downloadResultsXlsx } from "../../services/resultsExport";
+import {
+  TYPE_LABELS, answerText, average, chartQuestion, hasOptions, isChartable, isSingleOption, npsScore,
+} from "../../services/questionTypes";
 import { CHART_COLORS } from "../../styles/chartColors";
 import Spinner from "../../components/atoms/Spinner";
 import { useParams, useNavigate } from "react-router-dom";
@@ -7,7 +11,8 @@ import styled from "styled-components";
 import {
   FiArrowLeft, FiEdit3, FiEye, FiUsers, FiCheckCircle,
   FiMessageSquare, FiClock, FiTrendingUp, FiPercent, FiDownload,
-  FiCalendar, FiChevronLeft, FiChevronRight, FiTrash2, FiAlertTriangle, FiX
+  FiCalendar, FiChevronLeft, FiChevronRight, FiTrash2, FiAlertTriangle, FiX,
+  FiFileText, FiGrid, FiFile
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import { responsesApi } from "../../services/api";
@@ -454,12 +459,66 @@ const CellText = styled.span`
 `;
 
 /** Abajo a la derecha, siempre visible aunque la tabla sea larga. */
-const DownloadButton = styled(Button)`
+/* Boton fijo abajo a la derecha; el menu de formatos se abre encima. */
+const DownloadDock = styled.div`
   position: fixed;
   right: 32px;
   bottom: calc(28px + env(safe-area-inset-bottom, 0px));
   z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+`;
+
+const DownloadButton = styled(Button)`
   box-shadow: ${({ theme }) => theme.shadows.lg};
+`;
+
+const DownloadMenu = styled.div`
+  min-width: 220px;
+  padding: 6px;
+  background: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.radii.lg};
+  box-shadow: ${({ theme }) => theme.shadows.lg};
+  display: flex;
+  flex-direction: column;
+`;
+
+const DownloadOption = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: ${({ theme }) => theme.radii.md};
+  text-align: left;
+  font-size: ${({ theme }) => theme.fontSizes.base};
+  color: ${({ theme }) => theme.colors.text};
+
+  small {
+    display: block;
+    font-size: ${({ theme }) => theme.fontSizes.xs};
+    color: ${({ theme }) => theme.colors.textMuted};
+  }
+
+  &:hover { background: ${({ theme }) => theme.colors.surfaceAlt}; }
+`;
+
+/* Promedio, NPS: una linea de cifras encima del grafico. */
+const StatLine = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-bottom: 16px;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+
+  strong {
+    font-size: ${({ theme }) => theme.fontSizes.lg};
+    color: ${({ theme }) => theme.colors.text};
+    margin-right: 4px;
+  }
 `;
 
 const EmptyMsg = styled.p`
@@ -682,12 +741,7 @@ function hasValue(answer) {
 // Compartidos con el informe en PDF, para que cada opcion tenga el mismo color.
 const chartColors = CHART_COLORS;
 
-const typeLabels = {
-  short_text: "Texto corto",
-  long_text: "Texto largo",
-  single_choice: "Opcion unica",
-  multiple_choice: "Opcion multiple",
-};
+const typeLabels = TYPE_LABELS;
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString("es-ES", {
@@ -741,6 +795,7 @@ function FormResults() {
   const { getForm, status, error, reload, getFormResponses, loadResponses } = useForms();
   const [activeTab, setActiveTab] = useState("resumen");
   const [downloading, setDownloading] = useState(false);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const toast = useToast();
 
   // Filtro por fecha: cadenas yyyy-mm-dd de los <input type="date">. Vacias = sin limite.
@@ -822,7 +877,9 @@ function FormResults() {
   ).length;
   const completionRate = totalResponses > 0 ? Math.round((answeredCount / totalResponses) * 100) : 0;
 
-  const getChoiceStats = (question) => {
+  // Las escalas (estrellas, NPS) se cuentan como si cada valor fuera una opcion.
+  const getChoiceStats = (original) => {
+    const question = chartQuestion(original);
     const counts = {};
     question.options.forEach((opt) => { counts[opt.id] = 0; });
     formResponses.forEach((r) => {
@@ -843,10 +900,10 @@ function FormResults() {
     }));
   };
 
-  const getTextResponses = (questionId) =>
+  const getTextResponses = (question) =>
     formResponses
-      .filter((r) => r.answers[questionId] && r.answers[questionId].toString().trim() !== "")
-      .map((r) => ({ text: r.answers[questionId], date: r.submittedAt }));
+      .filter((r) => hasValue(r.answers[question.id]))
+      .map((r) => ({ text: answerText(question, r.answers[question.id]), date: r.submittedAt }));
 
   const getRespondentName = (response) => {
     const r = response.respondent || {};
@@ -865,14 +922,21 @@ function FormResults() {
     return "";
   };
 
-  const handleDownload = async () => {
+  const downloaders = {
+    pdf: { run: downloadResultsPdf, name: "el PDF" },
+    xlsx: { run: downloadResultsXlsx, name: "el Excel" },
+    csv: { run: downloadResultsCsv, name: "el CSV" },
+  };
+
+  const handleDownload = async (format) => {
+    setDownloadMenuOpen(false);
     if (downloading || totalResponses === 0) return;
 
     setDownloading(true);
     try {
-      await downloadResultsPdf(form, formResponses);
+      await downloaders[format].run(form, formResponses);
     } catch (err) {
-      toast.error(`No se pudo generar el PDF: ${err.message}`);
+      toast.error(`No se pudo generar ${downloaders[format].name}: ${err.message}`);
     } finally {
       setDownloading(false);
     }
@@ -939,11 +1003,11 @@ function FormResults() {
       );
     }
 
-    if (question.type === "single_choice") {
+    if (hasOptions(question.type)) {
       return <ChipList><Chip>{optionText(question, Array.isArray(answer) ? answer[0] : answer)}</Chip></ChipList>;
     }
 
-    return <AnswerText>{answer.toString()}</AnswerText>;
+    return <AnswerText>{answerText(question, answer)}</AnswerText>;
   };
 
   /**
@@ -1076,10 +1140,12 @@ function FormResults() {
             </KpiGrid>
 
             {form.questions.map((q, i) => {
-              const isChoice = q.type === "single_choice" || q.type === "multiple_choice";
+              const isChoice = isChartable(q.type);
               const stats = isChoice ? getChoiceStats(q) : [];
               const totalForQ = stats.reduce((a, b) => a + b.count, 0);
-              const textResps = !isChoice ? getTextResponses(q.id) : [];
+              const textResps = !isChoice ? getTextResponses(q) : [];
+              const avg = ["rating", "nps", "number"].includes(q.type) ? average(q, formResponses) : null;
+              const nps = q.type === "nps" ? npsScore(q, formResponses) : null;
 
               return (
                 <QuestionBlock key={q.id}>
@@ -1089,11 +1155,32 @@ function FormResults() {
                   </QHeader>
                   <QResponseCount>
                     {isChoice
-                      ? `${formResponses.filter((r) => r.answers[q.id]).length} respuestas`
+                      ? `${formResponses.filter((r) => hasValue(r.answers[q.id])).length} respuestas`
                       : `${textResps.length} respuestas`}
                   </QResponseCount>
 
-                  {q.type === "single_choice" && (
+                  {(avg !== null || nps) && (
+                    <StatLine>
+                      {nps && (
+                        <span title="% de promotores (9-10) menos % de detractores (0-6)">
+                          <strong>{nps.score > 0 ? `+${nps.score}` : nps.score}</strong> NPS
+                        </span>
+                      )}
+                      {nps && (
+                        <span>
+                          Promotores {nps.promoters}% · Pasivos {nps.passives}% · Detractores {nps.detractors}%
+                        </span>
+                      )}
+                      {avg !== null && (
+                        <span>
+                          <strong>{avg.toLocaleString("es-ES", { maximumFractionDigits: 2 })}</strong>
+                          {q.type === "rating" ? `promedio de ${q.scaleMax || 5} estrellas` : "promedio"}
+                        </span>
+                      )}
+                    </StatLine>
+                  )}
+
+                  {isSingleOption(q.type) && (
                     <ChartRow>
                       <DonutWrapper>
                         <DonutChart stats={stats} total={totalForQ} />
@@ -1111,7 +1198,7 @@ function FormResults() {
                     </ChartRow>
                   )}
 
-                  {q.type === "multiple_choice" && (
+                  {isChoice && !isSingleOption(q.type) && (
                     <BarList>
                       {stats.map((s) => (
                         <BarRow key={s.label}>
@@ -1126,7 +1213,7 @@ function FormResults() {
                     </BarList>
                   )}
 
-                  {(q.type === "short_text" || q.type === "long_text") && (
+                  {!isChoice && (
                     textResps.length > 0 ? (
                       <TextList>
                         {textResps.map((r, j) => (
@@ -1286,14 +1373,34 @@ function FormResults() {
 
         {/* En las dos pestanas, en el mismo sitio: el informe es el mismo. */}
         {responsesState === "ready" && (
-          <DownloadButton
-            onClick={handleDownload}
-            disabled={downloading || totalResponses === 0}
-            title={totalResponses === 0 ? "Todavia no hay respuestas para descargar" : "Informe completo en PDF"}
-          >
-            {downloading ? <Spinner $size={14} $color="currentColor" /> : <FiDownload size={16} />}
-            {downloading ? "Generando..." : "Descargar"}
-          </DownloadButton>
+          <DownloadDock>
+            {downloadMenuOpen && (
+              <DownloadMenu role="menu">
+                <DownloadOption role="menuitem" onClick={() => handleDownload("pdf")}>
+                  <FiFileText size={18} />
+                  <span>Informe PDF<small>Graficos y detalle, para imprimir o enviar</small></span>
+                </DownloadOption>
+                <DownloadOption role="menuitem" onClick={() => handleDownload("xlsx")}>
+                  <FiGrid size={18} />
+                  <span>Excel (.xlsx)<small>Una fila por respuesta y hoja de resumen</small></span>
+                </DownloadOption>
+                <DownloadOption role="menuitem" onClick={() => handleDownload("csv")}>
+                  <FiFile size={18} />
+                  <span>CSV<small>Para otros sistemas</small></span>
+                </DownloadOption>
+              </DownloadMenu>
+            )}
+            <DownloadButton
+              onClick={() => setDownloadMenuOpen((open) => !open)}
+              disabled={downloading || totalResponses === 0}
+              aria-haspopup="menu"
+              aria-expanded={downloadMenuOpen}
+              title={totalResponses === 0 ? "Todavia no hay respuestas para descargar" : "Descargar en PDF, Excel o CSV"}
+            >
+              {downloading ? <Spinner $size={14} $color="currentColor" /> : <FiDownload size={16} />}
+              {downloading ? "Generando..." : "Descargar"}
+            </DownloadButton>
+          </DownloadDock>
         )}
       </Main>
     </Page>

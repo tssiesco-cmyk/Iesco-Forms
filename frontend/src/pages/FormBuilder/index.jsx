@@ -6,8 +6,13 @@ import {
   FiCircle, FiCheckSquare, FiChevronUp, FiChevronDown,
   FiEye, FiX, FiBarChart2, FiUser, FiToggleLeft, FiToggleRight, FiMail, FiPhone,
   FiSend, FiRotateCcw, FiCheck, FiAlertCircle, FiImage, FiUpload,
-  FiCopy, FiChevronsLeft, FiChevronsRight, FiShare2, FiLayout, FiClock, FiBookmark
+  FiCopy, FiChevronsLeft, FiChevronsRight, FiShare2, FiLayout, FiClock, FiBookmark,
+  FiList, FiThumbsUp, FiStar, FiTrendingUp, FiHash, FiCalendar, FiGitBranch, FiCornerDownRight
 } from "react-icons/fi";
+import {
+  TYPE_LABELS, TEXT_TYPES, JUMP_END, SCALE_CHOICES, DEFAULT_SCALE,
+  hasOptions, hasEditableOptions, isSingleOption,
+} from "../../services/questionTypes";
 import { useForms } from "../../context/FormContext";
 import Button from "../../components/atoms/Button";
 import Badge from "../../components/atoms/Badge";
@@ -287,7 +292,7 @@ const AddGrid = styled.div`
 `;
 
 const AddButton = styled.button`
-  padding: 10px;
+  padding: 8px 10px;
   border-radius: ${({ theme }) => theme.radii.md};
   border: 1px solid ${({ theme }) => theme.colors.border};
   background: ${({ theme }) => theme.colors.surface};
@@ -313,6 +318,9 @@ const AddButton = styled.button`
 /* --- MAIN EDITOR --- */
 const MainEditor = styled.main`
   flex: 1;
+  /* Sin esto el editor no se encoge por debajo de lo que miden los botones y la
+     barra de arriba empuja todo hacia afuera. */
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -332,6 +340,7 @@ const ToolbarStatus = styled.div`
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 `;
 
 const ToolbarHint = styled.span`
@@ -348,10 +357,30 @@ const SaveIndicator = styled.span`
   transition: color 0.2s ease;
 `;
 
+/* Cuando los botones no caben (p. ej. "Volver a borrador" es mas ancho que
+   "Publicar") se desplazan con una barra horizontal en vez de cortarse. */
 const ToolbarActions = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+
+  & > * {
+    flex-shrink: 0;
+  }
+
+  &::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: ${({ theme }) => theme.colors.border};
+    border-radius: 3px;
+  }
 `;
 
 const PanelToggle = styled.button`
@@ -500,7 +529,7 @@ const OptionMarker = styled.div`
   width: 20px;
   height: 20px;
   border: 2px solid ${({ theme }) => theme.colors.border};
-  border-radius: ${({ $type }) => $type === "single_choice" ? "50%" : "4px"};
+  border-radius: ${({ $type }) => $type === "multiple_choice" ? "4px" : "50%"};
   flex-shrink: 0;
 `;
 
@@ -612,6 +641,103 @@ const TypeLabel = styled.span`
   background: ${({ theme }) => theme.colors.surfaceAlt};
   padding: 4px 8px;
   border-radius: 4px;
+`;
+
+/* --- LOGICA CONDICIONAL --- */
+const JumpSelectBox = styled.select`
+  max-width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid ${({ $warning, theme }) => $warning ? theme.colors.warning : theme.colors.border};
+  border-radius: ${({ theme }) => theme.radii.sm};
+  background: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  cursor: pointer;
+
+  &:focus { border-color: ${({ theme }) => theme.colors.primary}; }
+`;
+
+/* El salto de cada opcion va debajo de ella, sangrado, para que se lea
+   "si elige esto -> ir a". */
+const OptionJumpRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0 2px 30px;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textMuted};
+
+  ${JumpSelectBox} { flex: 1; }
+`;
+
+const LogicSection = styled.div`
+  margin: 20px 0 16px;
+  padding: 12px 14px;
+  border: 1px dashed ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.radii.md};
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+
+  ${JumpSelectBox} { flex: 1; min-width: 180px; }
+`;
+
+const OptionsLogicHint = styled.p`
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: -6px 0 16px;
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.textMuted};
+
+  svg { flex-shrink: 0; margin-top: 2px; }
+`;
+
+const LogicHint = styled.p`
+  width: 100%;
+  margin: 0;
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.textMuted};
+`;
+
+/* Vista previa inerte de las escalas: estrellas y 0-10. */
+const ScalePreview = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+  color: ${({ theme }) => theme.colors.textMuted};
+`;
+
+const ScaleBox = styled.span`
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.radii.sm};
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+`;
+
+const ScaleSetting = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const LogicMark = styled.span`
+  display: flex;
+  flex-shrink: 0;
+  color: ${({ theme }) => theme.colors.primary};
 `;
 
 /* --- INTRO FIELDS SECTION --- */
@@ -845,16 +971,8 @@ const IntroAddBtn = styled.button`
   &:hover { background: ${({ theme }) => theme.colors.primaryLight}; }
 `;
 
-const typeLabels = {
-  short_text: "Texto corto",
-  long_text: "Texto largo",
-  single_choice: "Opcion unica",
-  multiple_choice: "Opcion multiple",
-};
-
-// El formato solo cambia algo donde se escribe libremente; en las de opciones
-// el texto lo fija quien arma el formulario, no quien responde.
-const TEXT_TYPES = ["short_text", "long_text"];
+// El formato de mayusculas (TEXT_TYPES) solo cambia algo donde se escribe
+// libremente; en las de opciones el texto lo fija quien arma el formulario.
 
 const caseOptions = [
   { value: "upper", label: "MAYUSCULA" },
@@ -867,7 +985,62 @@ const typeIcons = {
   long_text: <FiAlignLeft size={14} />,
   single_choice: <FiCircle size={14} />,
   multiple_choice: <FiCheckSquare size={14} />,
+  dropdown: <FiList size={14} />,
+  yes_no: <FiThumbsUp size={14} />,
+  rating: <FiStar size={14} />,
+  nps: <FiTrendingUp size={14} />,
+  number: <FiHash size={14} />,
+  date: <FiCalendar size={14} />,
 };
+
+/** Botones de "Agregar pregunta", con el nombre corto que cabe en la cuadricula. */
+const addButtons = [
+  { type: "short_text", label: "Texto corto" },
+  { type: "long_text", label: "Texto largo" },
+  { type: "single_choice", label: "Opcion unica" },
+  { type: "multiple_choice", label: "Multiple" },
+  { type: "dropdown", label: "Desplegable" },
+  { type: "yes_no", label: "Sí / No" },
+  { type: "rating", label: "Calificacion" },
+  { type: "nps", label: "NPS" },
+  { type: "number", label: "Numero" },
+  { type: "date", label: "Fecha" },
+];
+
+/**
+ * Selector de a donde ir: la siguiente, una pregunta posterior o el final.
+ * Solo ofrece preguntas de mas abajo para que no haya ciclos. Si el salto
+ * guardado quedo apuntando hacia arriba (se reordeno), se muestra igual para
+ * avisar de que se ignora.
+ */
+function JumpSelect({ value, questions, fromIndex, onChange, defaultLabel = "Siguiente pregunta", ...rest }) {
+  const targetIndex = value && value !== JUMP_END ? questions.findIndex((q) => q.id === value) : -1;
+  const pointsBack = targetIndex >= 0 && targetIndex <= fromIndex;
+
+  return (
+    <JumpSelectBox
+      value={value || ""}
+      onChange={(event) => onChange(event.target.value)}
+      $warning={pointsBack}
+      {...rest}
+    >
+      <option value="">{defaultLabel}</option>
+      {questions.map((q, i) => (
+        i > fromIndex && (
+          <option key={q.id} value={q.id}>
+            Ir a la {i + 1}: {q.title || "Pregunta sin titulo"}
+          </option>
+        )
+      ))}
+      {pointsBack && (
+        <option value={value}>
+          Pregunta {targetIndex + 1} (esta arriba: se ignora)
+        </option>
+      )}
+      <option value={JUMP_END}>Terminar el formulario</option>
+    </JumpSelectBox>
+  );
+}
 
 function FormBuilder() {
   const { id } = useParams();
@@ -878,7 +1051,7 @@ function FormBuilder() {
     setBackgroundPerQuestion, uploadQuestionBackground, removeQuestionBackground,
     uploadIntroBackground, removeIntroBackground, setCover,
     updateForm, addQuestion, updateQuestion,
-    deleteQuestion, duplicateQuestion, reorderQuestions, addOption, updateOption, deleteOption,
+    deleteQuestion, duplicateQuestion, reorderQuestions, addOption, updateOption, setOptionJump, deleteOption,
     updateIntroField, addIntroField, removeIntroField
   } = useForms();
 
@@ -1425,16 +1598,17 @@ function FormBuilder() {
                 <FiSend size={14} /> Publicar
               </Button>
             )}
-
-            <PanelToggle
-              onClick={() => setPanelOpen((open) => !open)}
-              title={panelOpen ? "Ocultar panel de preguntas" : "Mostrar panel de preguntas"}
-              aria-label={panelOpen ? "Ocultar panel de preguntas" : "Mostrar panel de preguntas"}
-              aria-expanded={panelOpen}
-            >
-              {panelOpen ? <FiChevronsRight size={18} /> : <FiChevronsLeft size={18} />}
-            </PanelToggle>
           </ToolbarActions>
+
+          {/* Fuera de la zona que se desplaza para que siempre quede a la vista. */}
+          <PanelToggle
+            onClick={() => setPanelOpen((open) => !open)}
+            title={panelOpen ? "Ocultar panel de preguntas" : "Mostrar panel de preguntas"}
+            aria-label={panelOpen ? "Ocultar panel de preguntas" : "Mostrar panel de preguntas"}
+            aria-expanded={panelOpen}
+          >
+            {panelOpen ? <FiChevronsRight size={18} /> : <FiChevronsLeft size={18} />}
+          </PanelToggle>
         </EditorToolbar>
 
         <EditorContent>
@@ -1479,34 +1653,101 @@ function FormBuilder() {
                   placeholder="Descripcion (opcional)"
                 />
 
-                {(activeQuestion.type === "single_choice" ||
-                  activeQuestion.type === "multiple_choice") && (
+                {hasOptions(activeQuestion.type) && (
                   <>
                     <OptionsList>
                       {activeQuestion.options.map((opt, i) => (
-                        <OptionRow key={opt.id}>
-                          <OptionMarker $type={activeQuestion.type} />
-                          <OptionInput
-                            value={opt.text}
-                            onChange={(e) =>
-                              updateOption(id, activeQuestion.id, opt.id, e.target.value)
-                            }
-                            placeholder={`Opcion ${i + 1}`}
-                          />
-                          {activeQuestion.options.length > 1 && (
-                            <RemoveOptionBtn
-                              onClick={() => deleteOption(id, activeQuestion.id, opt.id)}
-                            >
-                              <FiX size={14} />
-                            </RemoveOptionBtn>
+                        <div key={opt.id}>
+                          <OptionRow>
+                            <OptionMarker $type={activeQuestion.type} />
+                            <OptionInput
+                              value={opt.text}
+                              onChange={(e) =>
+                                updateOption(id, activeQuestion.id, opt.id, e.target.value)
+                              }
+                              placeholder={`Opcion ${i + 1}`}
+                            />
+                            {hasEditableOptions(activeQuestion.type) && activeQuestion.options.length > 1 && (
+                              <RemoveOptionBtn
+                                onClick={() => deleteOption(id, activeQuestion.id, opt.id)}
+                              >
+                                <FiX size={14} />
+                              </RemoveOptionBtn>
+                            )}
+                          </OptionRow>
+
+                          {/* Logica por opcion: solo cuando se elige una sola. */}
+                          {isSingleOption(activeQuestion.type) && form.questions.length > 1 && (
+                            <OptionJumpRow>
+                              <FiCornerDownRight size={13} />
+                              <JumpSelect
+                                value={opt.jumpTo}
+                                questions={form.questions}
+                                fromIndex={activeIndex}
+                                aria-label={`A donde ir si elige ${opt.text || `la opcion ${i + 1}`}`}
+                                onChange={(jumpTo) => setOptionJump(id, activeQuestion.id, opt.id, jumpTo)}
+                              />
+                            </OptionJumpRow>
                           )}
-                        </OptionRow>
+                        </div>
                       ))}
                     </OptionsList>
-                    <AddOptionBtn onClick={() => addOption(id, activeQuestion.id)}>
-                      <FiPlus size={14} /> Agregar opcion
-                    </AddOptionBtn>
+                    {isSingleOption(activeQuestion.type) && form.questions.length > 1 && (
+                      <OptionsLogicHint>
+                        <FiGitBranch size={12} />
+                        Elige a donde lleva cada respuesta. Las preguntas que se saltan no se
+                        muestran ni se exigen, aunque sean obligatorias.
+                      </OptionsLogicHint>
+                    )}
+                    {hasEditableOptions(activeQuestion.type) && (
+                      <AddOptionBtn onClick={() => addOption(id, activeQuestion.id)}>
+                        <FiPlus size={14} /> Agregar opcion
+                      </AddOptionBtn>
+                    )}
                   </>
+                )}
+
+                {activeQuestion.type === "rating" && (
+                  <>
+                    <ScaleSetting>
+                      Estrellas
+                      <JumpSelectBox
+                        value={activeQuestion.scaleMax || DEFAULT_SCALE}
+                        onChange={(e) =>
+                          updateQuestion(id, activeQuestion.id, { scaleMax: Number(e.target.value) })
+                        }
+                      >
+                        {SCALE_CHOICES.map((n) => <option key={n} value={n}>{n}</option>)}
+                      </JumpSelectBox>
+                    </ScaleSetting>
+                    <ScalePreview aria-hidden="true">
+                      {Array.from({ length: activeQuestion.scaleMax || DEFAULT_SCALE }, (_, i) => (
+                        <FiStar key={i} size={26} />
+                      ))}
+                    </ScalePreview>
+                  </>
+                )}
+
+                {activeQuestion.type === "nps" && (
+                  <ScalePreview aria-hidden="true">
+                    {Array.from({ length: 11 }, (_, i) => <ScaleBox key={i}>{i}</ScaleBox>)}
+                  </ScalePreview>
+                )}
+
+                {activeQuestion.type === "number" && (
+                  <OptionInput
+                    disabled
+                    placeholder="Un numero, por ejemplo 42"
+                    style={{ opacity: 0.5, cursor: "default" }}
+                  />
+                )}
+
+                {activeQuestion.type === "date" && (
+                  <OptionInput
+                    disabled
+                    type="date"
+                    style={{ opacity: 0.5, cursor: "default", flex: "none" }}
+                  />
                 )}
 
                 {activeQuestion.type === "short_text" && (
@@ -1574,8 +1815,29 @@ function FormBuilder() {
                   </QuestionBackground>
                 )}
 
+                {/* La logica se arma por opcion, que es donde la respuesta decide
+                    el camino. El salto general de la pregunta ya no se ofrece;
+                    solo se muestra si una pregunta lo trae guardado (de una
+                    version anterior), para poder quitarlo. */}
+                {activeQuestion.jumpTo && (
+                  <LogicSection>
+                    <FiGitBranch size={14} />
+                    Despues de esta pregunta
+                    <JumpSelect
+                      value={activeQuestion.jumpTo}
+                      questions={form.questions}
+                      fromIndex={activeIndex}
+                      aria-label="A donde ir despues de esta pregunta"
+                      onChange={(jumpTo) => updateQuestion(id, activeQuestion.id, { jumpTo })}
+                    />
+                    <LogicHint>
+                      Salto guardado de antes. Elige "Siguiente pregunta" para quitarlo.
+                    </LogicHint>
+                  </LogicSection>
+                )}
+
                 <QFooter>
-                  <TypeLabel>{typeLabels[activeQuestion.type]}</TypeLabel>
+                  <TypeLabel>{TYPE_LABELS[activeQuestion.type]}</TypeLabel>
                   <RequiredToggle>
                     Obligatoria
                     <Toggle
@@ -1598,6 +1860,13 @@ function FormBuilder() {
         <QuestionsHeader>
           Preguntas
           <QuestionsCount>{form.questions.length}</QuestionsCount>
+          <PanelToggle
+            onClick={() => setPanelOpen(false)}
+            title="Ocultar panel de preguntas"
+            aria-label="Ocultar panel de preguntas"
+          >
+            <FiChevronsRight size={18} />
+          </PanelToggle>
         </QuestionsHeader>
 
         <QuestionList>
@@ -1628,6 +1897,12 @@ function FormBuilder() {
               <QuestionLabel>
                 {q.title || "Pregunta sin titulo"}
               </QuestionLabel>
+
+              {(q.jumpTo || q.options.some((o) => o.jumpTo)) && (
+                <LogicMark title="Tiene logica condicional">
+                  <FiGitBranch size={13} />
+                </LogicMark>
+              )}
 
               <QuestionTypeIcon>{typeIcons[q.type]}</QuestionTypeIcon>
 
@@ -1664,18 +1939,16 @@ function FormBuilder() {
         <AddSection>
           <AddTitle>Agregar pregunta</AddTitle>
           <AddGrid>
-            <AddButton onClick={() => handleAddQuestion("short_text")} disabled={Boolean(addingType)}>
-              {addingType === "short_text" ? <Spinner $size={14} /> : <FiType size={14} />} Texto corto
-            </AddButton>
-            <AddButton onClick={() => handleAddQuestion("long_text")} disabled={Boolean(addingType)}>
-              {addingType === "long_text" ? <Spinner $size={14} /> : <FiAlignLeft size={14} />} Texto largo
-            </AddButton>
-            <AddButton onClick={() => handleAddQuestion("single_choice")} disabled={Boolean(addingType)}>
-              {addingType === "single_choice" ? <Spinner $size={14} /> : <FiCircle size={14} />} Opcion unica
-            </AddButton>
-            <AddButton onClick={() => handleAddQuestion("multiple_choice")} disabled={Boolean(addingType)}>
-              {addingType === "multiple_choice" ? <Spinner $size={14} /> : <FiCheckSquare size={14} />} Multiple
-            </AddButton>
+            {addButtons.map(({ type, label }) => (
+              <AddButton
+                key={type}
+                onClick={() => handleAddQuestion(type)}
+                disabled={Boolean(addingType)}
+                title={TYPE_LABELS[type]}
+              >
+                {addingType === type ? <Spinner $size={14} /> : typeIcons[type]} {label}
+              </AddButton>
+            ))}
           </AddGrid>
         </AddSection>
       </SidePanel>

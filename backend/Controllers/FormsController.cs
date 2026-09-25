@@ -288,7 +288,14 @@ public class FormsController(
             return ValidationProblem(ModelState);
         }
 
-        var question = store.UpdateQuestion(id, questionId, request.Title, request.Description, request.Required, request.TextCase);
+        if (request.JumpTo is not null && !IsValidJump(form, questionId, request.JumpTo))
+        {
+            ModelState.AddModelError(nameof(request.JumpTo), "El salto tiene que llevar a otra pregunta del formulario o al final.");
+            return ValidationProblem(ModelState);
+        }
+
+        var question = store.UpdateQuestion(id, questionId, request.Title, request.Description, request.Required,
+            request.TextCase, request.JumpTo, request.ScaleMax);
         if (question is null) return QuestionNotFound(id, questionId);
 
         Notify(form, NotificationType.FormUpdated);
@@ -351,7 +358,14 @@ public class FormsController(
     public IActionResult UpdateOption(string id, string questionId, string optionId, [FromBody] UpdateOptionRequest request)
     {
         var form = Editable(id);
-        if (form is null || !store.UpdateOption(id, questionId, optionId, request.Text))
+
+        if (form is not null && request.JumpTo is not null && !IsValidJump(form, questionId, request.JumpTo))
+        {
+            ModelState.AddModelError(nameof(request.JumpTo), "El salto tiene que llevar a otra pregunta del formulario o al final.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (form is null || !store.UpdateOption(id, questionId, optionId, request.Text, request.JumpTo))
         {
             return Problem($"No se encontro la opcion '{optionId}'.", statusCode: StatusCodes.Status404NotFound);
         }
@@ -568,6 +582,16 @@ public class FormsController(
     }
 
     // --- Ayudantes ---
+
+    /// <summary>
+    /// Un salto vale si se quita (vacio), si termina el formulario o si lleva a
+    /// otra pregunta del mismo formulario. Que sea hacia adelante no se exige
+    /// aqui: el orden cambia al reordenar, y al responder uno hacia atras se ignora.
+    /// </summary>
+    private static bool IsValidJump(Form form, string questionId, string jumpTo) =>
+        jumpTo.Length == 0
+        || jumpTo == QuestionJump.End
+        || (jumpTo != questionId && form.Questions.Any(q => q.Id == jumpTo));
 
     private ObjectResult FormNotFound(string id) =>
         Problem($"No existe el formulario '{id}'.", statusCode: StatusCodes.Status404NotFound);

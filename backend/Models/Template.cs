@@ -89,8 +89,21 @@ public class TemplateQuestion
     public string TextCase { get; set; } = QuestionTextCase.Normal;
     public string BackgroundImage { get; set; } = string.Empty;
 
+    /// <summary>Estrellas de las preguntas rating.</summary>
+    public int? ScaleMax { get; set; }
+
+    /// <summary>
+    /// Salto de la pregunta. Como los ids se generan al crear el formulario,
+    /// aqui el destino va por posicion: vacio, "end" o el indice de la pregunta
+    /// destino dentro de <see cref="Template.Questions"/>.
+    /// </summary>
+    public string JumpTo { get; set; } = string.Empty;
+
     /// <summary>Textos de las opciones. Los ids se generan al crear el formulario.</summary>
     public List<string> Options { get; set; } = [];
+
+    /// <summary>Salto de cada opcion, en el mismo orden que Options y con el formato de JumpTo.</summary>
+    public List<string> OptionJumps { get; set; } = [];
 }
 
 public class TemplateIntroField

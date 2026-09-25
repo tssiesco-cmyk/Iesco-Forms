@@ -62,6 +62,7 @@ public class IescoFormsDbContext(DbContextOptions<IescoFormsDbContext> options) 
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnType("varchar(36)");
             e.Property(x => x.FormId).HasColumnType("varchar(36)");
+            e.Property(x => x.JumpTo).HasColumnType("varchar(36)");
             e.Property(x => x.RowVersion).IsRowVersion();
 
             e.HasMany(x => x.Options)
@@ -82,6 +83,7 @@ public class IescoFormsDbContext(DbContextOptions<IescoFormsDbContext> options) 
             e.Property(x => x.Id).HasColumnType("varchar(36)");
             e.Property(x => x.QuestionId).HasColumnType("varchar(36)");
             e.Property(x => x.Text).HasColumnName("Text");
+            e.Property(x => x.JumpTo).HasColumnType("varchar(36)");
             e.HasQueryFilter(x => x.DeletedAt == null);
         });
 
