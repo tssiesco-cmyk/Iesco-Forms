@@ -61,12 +61,23 @@ public static class QuestionType
     /// <summary>Fecha en formato yyyy-MM-dd.</summary>
     public const string Date = "date";
 
+    /// <summary>
+    /// Tabla de evaluacion: filas = criterios, columnas = opciones de calificacion.
+    /// Las columnas van en Options; las filas en Question.Rows.
+    /// La respuesta es un JSON {"rowId":"colOptId", ...} guardado en TextValue.
+    /// </summary>
+    public const string Matrix = "matrix";
+
     public static bool IsValid(string? type) =>
         type is ShortText or LongText or SingleChoice or MultipleChoice
-            or Dropdown or YesNo or Rating or Nps or Number or Date;
+            or Dropdown or YesNo or Rating or Nps or Number or Date or Matrix;
 
     public static bool HasOptions(string type) =>
         type is SingleChoice or MultipleChoice or Dropdown or YesNo;
+
+    /// <summary>Tipos que tienen opciones gestionables (columnas para matriz).</summary>
+    public static bool HasEditableOptions(string type) =>
+        HasOptions(type) || type == Matrix;
 
     /// <summary>Se elige una sola opcion. Son las que admiten saltos por opcion.</summary>
     public static bool IsSingleOption(string type) =>
@@ -252,6 +263,9 @@ public class Question
     /// <summary>Cuantas estrellas tiene una pregunta de tipo rating. Null en los demas tipos.</summary>
     public int? ScaleMax { get; set; }
 
+    /// <summary>Filas (criterios) de una pregunta de tipo matrix. Vacio en los demas tipos.</summary>
+    public List<MatrixRow> Rows { get; set; } = [];
+
     public List<QuestionOption> Options { get; set; } = [];
 }
 
@@ -262,6 +276,13 @@ public class QuestionOption
 
     /// <summary>A donde lleva elegir esta opcion. Solo en preguntas de opcion unica.</summary>
     public string JumpTo { get; set; } = string.Empty;
+}
+
+/// <summary>Una fila (criterio) de una pregunta de tipo matrix.</summary>
+public class MatrixRow
+{
+    public string Id { get; set; } = string.Empty;
+    public string Text { get; set; } = string.Empty;
 }
 
 public class IntroField

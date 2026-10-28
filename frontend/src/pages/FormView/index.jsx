@@ -7,7 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { formsApi, linksApi } from "../../services/api";
 import Spinner from "../../components/atoms/Spinner";
 import {
-  DEFAULT_SCALE, isAnswered, isSingleOption, nextQuestionIndex, visitedQuestionIds,
+  DEFAULT_SCALE, isAnswered, isSingleOption, matrixIsComplete, nextQuestionIndex, visitedQuestionIds,
 } from "../../services/questionTypes";
 
 /* --- ANIMATIONS --- */
@@ -163,6 +163,7 @@ const QuestionTitle = styled.h1`
   line-height: 1.35;
   margin: 0 0 8px;
   letter-spacing: -0.3px;
+  white-space: pre-wrap;
 `;
 
 const QuestionDesc = styled.p`
@@ -453,6 +454,7 @@ const IntroTitle = styled.h1`
   font-weight: 700;
   margin: 0 0 8px;
   letter-spacing: -0.3px;
+  white-space: pre-wrap;
 `;
 
 /* Va pegado al titulo, no al texto de bienvenida: son una unidad, como la
@@ -854,7 +856,9 @@ function FormView() {
     question?.type !== "number" || !isAnswered(value) || Number.isFinite(Number(value));
 
   const canProceedWith = (value) =>
-    (!question?.required || isAnswered(value)) && hasValidFormat(value);
+    (!question?.required || isAnswered(value)) &&
+    (!question?.required || matrixIsComplete(question, value)) &&
+    hasValidFormat(value);
   const canProceed = canProceedWith(currentAnswer);
 
   // Con la respuesta actual, aqui termina el formulario? Cambia el boton a "Enviar".
@@ -1217,6 +1221,59 @@ function FormView() {
                 );
               })}
             </OptionsGrid>
+          )}
+
+          {question.type === "matrix" && (
+            <div style={{ overflowX: "auto", marginBottom: 8 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.9rem" }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: "6px 12px 6px 0", textAlign: "left", fontWeight: 500, opacity: 0.7, minWidth: 120 }} />
+                    {question.options.map((col) => (
+                      <th key={col.id} style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, minWidth: 56 }}>
+                        {col.text}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(question.rows || []).map((row) => {
+                    const selected = currentAnswer?.[row.id];
+                    return (
+                      <tr key={row.id}>
+                        <td style={{ padding: "8px 12px 8px 0", borderTop: "1px solid rgba(255,255,255,0.12)" }}>
+                          {row.text}
+                        </td>
+                        {question.options.map((col) => (
+                          <td
+                            key={col.id}
+                            style={{ textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.12)", cursor: "pointer" }}
+                            onClick={() => {
+                              const newVal = { ...(currentAnswer || {}), [row.id]: col.id };
+                              setAnswer(newVal);
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                width: 20,
+                                height: 20,
+                                borderRadius: "50%",
+                                border: `2px solid ${selected === col.id ? "currentColor" : "rgba(255,255,255,0.35)"}`,
+                                background: selected === col.id ? "currentColor" : "transparent",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                transition: "all 0.15s",
+                              }}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
           {submitError && (
             <SubmitError>

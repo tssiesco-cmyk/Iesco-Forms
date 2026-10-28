@@ -89,7 +89,8 @@ public class ResponsesController(
 
         // Las preguntas obligatorias deben venir contestadas.
         var missing = path
-            .Where(q => q.Required && !HasAnswer(request.Answers, q.Id))
+            .Where(q => q.Required && (!HasAnswer(request.Answers, q.Id)
+                || !FormLogic.IsMatrixComplete(q, request.Answers?.GetValueOrDefault(q.Id))))
             .Select(q => string.IsNullOrWhiteSpace(q.Title) ? q.Id : q.Title)
             .ToList();
 
@@ -183,6 +184,7 @@ public class ResponsesController(
         return value switch
         {
             System.Text.Json.Nodes.JsonArray array => array.Count > 0,
+            System.Text.Json.Nodes.JsonObject obj => obj.Count > 0,
             _ => !string.IsNullOrWhiteSpace(value.ToString()),
         };
     }

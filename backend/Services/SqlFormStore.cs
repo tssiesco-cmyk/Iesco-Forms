@@ -169,6 +169,9 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 BackgroundImage = pregunta.BackgroundImage,
                 JumpTo = FormLogic.JumpFromTemplate(pregunta.JumpTo, idsNuevos),
                 ScaleMax = pregunta.Type == QuestionType.Rating ? pregunta.ScaleMax ?? QuestionType.DefaultScale : null,
+                Rows = pregunta.Type == QuestionType.Matrix
+                    ? JsonSerializer.Serialize(pregunta.Rows.Select(texto => new { id = NewId(), text = texto }))
+                    : null,
             };
 
             var posicionOpcion = 0;
@@ -230,6 +233,7 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 TextCase = q.TextCase,
                 BackgroundImage = q.BackgroundImage,
                 ScaleMax = q.ScaleMax,
+                Rows = [.. q.Rows.Select(r => r.Text)],
                 JumpTo = FormLogic.JumpToTemplate(q.JumpTo, ids),
                 Options = [.. q.Options.Select(o => o.Text)],
                 OptionJumps = [.. q.Options.Select(o => FormLogic.JumpToTemplate(o.JumpTo, ids))],
@@ -462,6 +466,18 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
             fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 0, Text = "Sí" });
             fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 1, Text = "No" });
         }
+        else if (type == QuestionType.Matrix)
+        {
+            fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 0, Text = "MB" });
+            fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 1, Text = "B" });
+            fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 2, Text = "R" });
+            fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 3, Text = "D" });
+            fila.Rows = JsonSerializer.Serialize(new[]
+            {
+                new { id = NewId(), text = "Criterio 1" },
+                new { id = NewId(), text = "Criterio 2" },
+            });
+        }
         else if (QuestionType.HasOptions(type))
         {
             fila.Options.Add(new QuestionOptionRow { Id = NewId(), QuestionId = fila.Id, Position = 0, Text = "Opcion 1" });
@@ -503,6 +519,7 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
             Required = original.Required,
             TextCase = original.TextCase,
             ScaleMax = original.ScaleMax,
+            Rows = original.Rows,
             // Los saltos apuntan a preguntas del mismo formulario, asi que sirven
             // tal cual. Uno que ahora quede hacia atras se ignora al responder.
             JumpTo = original.JumpTo,
@@ -529,7 +546,7 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         return ToModel(copia);
     }
 
-    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax)
+    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax, List<MatrixRow>? rows = null)
     {
         var fila = db.Questions
             .Include(q => q.Options.OrderBy(o => o.Position))
@@ -544,6 +561,8 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         // Cadena vacia quita el salto; null no lo toca.
         if (jumpTo is not null) fila.JumpTo = jumpTo.Length == 0 ? null : jumpTo;
         if (scaleMax.HasValue && fila.Type == QuestionType.Rating) fila.ScaleMax = scaleMax;
+        if (rows is not null && fila.Type == QuestionType.Matrix)
+            fila.Rows = JsonSerializer.Serialize(rows.Select(r => new { id = r.Id, text = r.Text }));
 
         db.SaveChanges();
         return ToModel(fila);
@@ -828,7 +847,12 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
 
             // Todo lo que no es de opciones (texto, numero, fecha, estrellas, NPS)
             // se guarda como texto; el formato de mayusculas solo aplica al texto libre.
-            if (!QuestionType.HasOptions(pregunta.Type))
+            if (pregunta.Type == QuestionType.Matrix)
+            {
+                if (valor is not JsonObject) continue;
+                detalle.TextValue = valor.ToJsonString();
+            }
+            else if (!QuestionType.HasOptions(pregunta.Type))
             {
                 var texto = TextoDe(valor);
                 detalle.TextValue = QuestionType.IsText(pregunta.Type)
@@ -954,9 +978,25 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         BackgroundImage = fila.BackgroundImage,
         JumpTo = fila.JumpTo ?? string.Empty,
         ScaleMax = fila.ScaleMax,
+        Rows = DeserializeRows(fila.Rows),
         Options = [.. fila.Options.OrderBy(o => o.Position)
             .Select(o => new QuestionOption { Id = o.Id, Text = o.Text, JumpTo = o.JumpTo ?? string.Empty })],
     };
+
+    private static List<MatrixRow> DeserializeRows(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return [];
+        try
+        {
+            var items = JsonSerializer.Deserialize<List<JsonElement>>(json) ?? [];
+            return [.. items.Select(e => new MatrixRow
+            {
+                Id = e.GetProperty("id").GetString() ?? string.Empty,
+                Text = e.GetProperty("text").GetString() ?? string.Empty,
+            })];
+        }
+        catch { return []; }
+    }
 
     private static IntroField ToModel(IntroFieldRow fila) => new()
     {
@@ -991,9 +1031,18 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                     ? new JsonArray([.. detalle.SelectedOptions.Select(o => (JsonNode?)JsonValue.Create(o.OptionId))])
                 : QuestionType.IsSingleOption(tipo)
                     ? JsonValue.Create(detalle.SelectedOptions.FirstOrDefault()?.OptionId ?? string.Empty)
+                : tipo == QuestionType.Matrix
+                    ? ParseMatrix(detalle.TextValue)
                 : JsonValue.Create(detalle.TextValue ?? string.Empty);
         }
 
         return respuesta;
+    }
+
+    private static JsonNode ParseMatrix(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return new JsonObject();
+        try { return JsonNode.Parse(json) as JsonObject ?? new JsonObject(); }
+        catch (JsonException) { return new JsonObject(); }
     }
 }

@@ -77,8 +77,8 @@ const lightColors = {
   borderFocus: "#191919",
 
   text: "#191919",
-  textSecondary: "#6B6B76",
-  textMuted: "#9E9EA7",
+  textSecondary: "#4A4A57",
+  textMuted: "#737380",
   textInverse: "#FFFFFF",
 
   success: "#2DB87F",

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
-import { FiEdit3, FiPlus, FiX, FiSearch } from "react-icons/fi";
+import { FiEdit3, FiPlus, FiX, FiSearch, FiCheckSquare, FiDownload } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import PageHeader from "../../components/molecules/PageHeader";
 import SearchToolbar from "../../components/molecules/SearchToolbar";
@@ -14,6 +14,31 @@ import Button from "../../components/atoms/Button";
 import Spinner from "../../components/atoms/Spinner";
 import { matchesSearch } from "../../services/search";
 import ShareFormModal from "../../components/organisms/ShareFormModal";
+import { responsesApi } from "../../services/api";
+import { downloadMultipleResultsPdf } from "../../services/resultsPdf";
+
+const SelectionBar = styled.div`
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.radii.xl};
+  box-shadow: ${({ theme }) => theme.shadows.lg};
+  padding: 10px 10px 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 100;
+  white-space: nowrap;
+`;
+
+const SelectionCount = styled.span`
+  font-size: ${({ theme }) => theme.fontSizes.md};
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
+  color: ${({ theme }) => theme.colors.text};
+`;
 
 const CardGrid = styled.div`
   display: grid;
@@ -127,6 +152,9 @@ function Forms() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [shareTarget, setShareTarget] = useState(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [downloading, setDownloading] = useState(false);
 
   // Los que te compartieron viven en Compartidos, no aqui.
   const myForms = forms.filter((f) => !f.sharedPermission);
@@ -145,6 +173,36 @@ function Forms() {
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("todos");
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDownload = async () => {
+    if (downloading || selectedIds.size === 0) return;
+    setDownloading(true);
+    try {
+      const selected = filtered.filter((f) => selectedIds.has(f.id));
+      const formsWithResponses = await Promise.all(
+        selected.map(async (form) => {
+          const responses = await responsesApi.listByForm(form.id);
+          return { form, responses: responses ?? [] };
+        })
+      );
+      await downloadMultipleResultsPdf(formsWithResponses);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const statusLabel = { Activo: "activos", Borrador: "en borrador" }[statusFilter];
@@ -182,9 +240,20 @@ function Forms() {
   return (
     <div>
       <PageHeader title="Mis formularios" subtitle="Crea, edita y administra todos tus formularios.">
-        <Button onClick={() => setShowModal(true)}>
-          <FiPlus size={16} /> Nuevo formulario
-        </Button>
+        {selectionMode ? (
+          <Button $variant="secondary" onClick={exitSelection}>
+            <FiX size={16} /> Cancelar selección
+          </Button>
+        ) : (
+          <>
+            <Button $variant="secondary" onClick={() => setSelectionMode(true)}>
+              <FiCheckSquare size={16} /> Seleccionar
+            </Button>
+            <Button onClick={() => setShowModal(true)}>
+              <FiPlus size={16} /> Nuevo formulario
+            </Button>
+          </>
+        )}
       </PageHeader>
 
       <SearchToolbar
@@ -231,28 +300,41 @@ function Forms() {
       {status === "ready" && filtered.length > 0 && (
       <CardGrid>
         <CreateCard label="Nuevo formulario" onClick={() => setShowModal(true)} />
-        {filtered.map((f) => {
-          return (
-            <FormCard
-              key={f.id}
-              icon={<FiEdit3 size={24} />}
-              image={coverImageOf(f)}
-              title={f.title}
-              date={f.status === "Borrador" ? "Borrador" : f.createdAt}
-              responses={f.responseCount ?? 0}
-              status={f.status}
-              badge={f.isPublic ? "Publico" : undefined}
-              onClick={() => navigate(`/formularios/${f.id}/editar`)}
-              onEdit={() => navigate(`/formularios/${f.id}/editar`)}
-              onPreview={() => navigate(`/formularios/${f.id}/vista`)}
-              onResults={() => navigate(`/formularios/${f.id}/resultados`)}
-              onDuplicate={f.access === "owner" || f.access === "edit" ? () => duplicateForm(f.id) : undefined}
-              onShare={f.access === "owner" ? () => setShareTarget(f) : undefined}
-              onDelete={f.access === "owner" ? () => setDeleteTarget(f) : undefined}
-            />
-          );
-        })}
+        {filtered.map((f) => (
+          <FormCard
+            key={f.id}
+            icon={<FiEdit3 size={24} />}
+            image={coverImageOf(f)}
+            title={f.title}
+            date={f.status === "Borrador" ? "Borrador" : f.createdAt}
+            responses={f.responseCount ?? 0}
+            status={f.status}
+            badge={f.isPublic ? "Publico" : undefined}
+            selected={selectedIds.has(f.id)}
+            onSelect={selectionMode ? () => toggleSelect(f.id) : undefined}
+            onClick={selectionMode ? () => toggleSelect(f.id) : () => navigate(`/formularios/${f.id}/editar`)}
+            onEdit={selectionMode ? undefined : () => navigate(`/formularios/${f.id}/editar`)}
+            onPreview={selectionMode ? undefined : () => navigate(`/formularios/${f.id}/vista`)}
+            onResults={selectionMode ? undefined : () => navigate(`/formularios/${f.id}/resultados`)}
+            onDuplicate={!selectionMode && (f.access === "owner" || f.access === "edit") ? () => duplicateForm(f.id) : undefined}
+            onShare={!selectionMode && f.access === "owner" ? () => setShareTarget(f) : undefined}
+            onDelete={!selectionMode && f.access === "owner" ? () => setDeleteTarget(f) : undefined}
+          />
+        ))}
       </CardGrid>
+      )}
+
+      {selectedIds.size > 0 && (
+        <SelectionBar>
+          <SelectionCount>{selectedIds.size} seleccionado{selectedIds.size !== 1 ? "s" : ""}</SelectionCount>
+          <Button onClick={handleBulkDownload} disabled={downloading}>
+            {downloading ? <Spinner $size={13} $color="currentColor" /> : <FiDownload size={14} />}
+            {downloading ? "Generando PDF..." : "Descargar PDF"}
+          </Button>
+          <Button $variant="ghost" onClick={() => setSelectedIds(new Set())}>
+            <FiX size={14} />
+          </Button>
+        </SelectionBar>
       )}
 
       {shareTarget && <ShareFormModal form={shareTarget} onClose={() => setShareTarget(null)} />}

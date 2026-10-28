@@ -410,7 +410,7 @@ public class InMemoryFormStore : IFormStore
         }
     }
 
-    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax)
+    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax, List<MatrixRow>? rows = null)
     {
         lock (_gate)
         {
@@ -423,6 +423,7 @@ public class InMemoryFormStore : IFormStore
             if (textCase is not null) question.TextCase = textCase;
             if (jumpTo is not null) question.JumpTo = jumpTo;
             if (scaleMax.HasValue && question.Type == QuestionType.Rating) question.ScaleMax = scaleMax;
+            if (rows is not null && question.Type == QuestionType.Matrix) question.Rows = rows;
 
             return question;
         }

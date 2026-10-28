@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import styled, { css } from "styled-components";
-import { FiMoreHorizontal, FiEdit3, FiEye, FiBarChart2, FiTrash2, FiCopy, FiShare2, FiLogOut } from "react-icons/fi";
+import { FiMoreHorizontal, FiEdit3, FiEye, FiBarChart2, FiTrash2, FiCopy, FiShare2, FiLogOut, FiCheck } from "react-icons/fi";
 import Badge from "../../atoms/Badge";
 
 const Card = styled.div`
   background: ${({ theme }) => theme.colors.surface};
-  border: 1px solid ${({ theme }) => theme.colors.border};
+  border: 1px solid ${({ $selected, theme }) => $selected ? theme.colors.primary : theme.colors.border};
   border-radius: ${({ theme }) => theme.radii.lg};
   transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
   cursor: pointer;
@@ -18,8 +18,30 @@ const Card = styled.div`
 
   &:hover {
     box-shadow: ${({ theme }) => theme.shadows.md};
-    border-color: ${({ theme }) => theme.colors.borderInput};
+    border-color: ${({ $selected, theme }) => $selected ? theme.colors.primary : theme.colors.borderInput};
     transform: translateY(-2px);
+  }
+`;
+
+const SelectCircle = styled.button`
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid ${({ $checked, theme }) => $checked ? theme.colors.primary : "rgba(200,200,210,0.9)"};
+  background: ${({ $checked, theme }) => $checked ? theme.colors.primary : "rgba(255,255,255,0.85)"};
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: ${({ theme }) => theme.colors.textInverse};
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary};
   }
 `;
 
@@ -70,6 +92,7 @@ const Title = styled.h3`
   color: ${({ theme }) => theme.colors.text};
   margin: 0;
   line-height: 1.3;
+  white-space: pre-wrap;
 `;
 
 const MenuWrapper = styled.div`
@@ -143,6 +166,7 @@ const MetaText = styled.span`
 function FormCard({
   icon, image, title, date, responses, status, badge,
   onClick, onEdit, onPreview, onResults, onDuplicate, onShare, onDelete, onLeave,
+  selected, onSelect,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -172,7 +196,15 @@ function FormCard({
   const hasMenu = Boolean(onEdit || onPreview || onResults || onDuplicate || onShare || onDelete || onLeave);
 
   return (
-    <Card onClick={onClick} $menuOpen={menuOpen}>
+    <Card onClick={onClick} $menuOpen={menuOpen} $selected={selected}>
+      {onSelect && (
+        <SelectCircle
+          $checked={selected}
+          onClick={(e) => { e.stopPropagation(); onSelect(); }}
+        >
+          {selected && <FiCheck size={12} />}
+        </SelectCircle>
+      )}
       <Preview $image={image}>
         {!image && <PreviewIcon>{icon}</PreviewIcon>}
       </Preview>

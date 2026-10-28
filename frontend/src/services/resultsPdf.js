@@ -77,6 +77,7 @@ function formatShortDate(iso) {
 function isAnswered(value) {
   if (value === null || value === undefined) return false;
   if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
   return value.toString().trim() !== "";
 }
 
@@ -144,15 +145,12 @@ function safeFileName(text) {
     .slice(0, 60) || "formulario";
 }
 
-export async function downloadResultsPdf(form, responses) {
-  const [{ jsPDF }, { autoTable }, logo] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-    // Sin logo el informe se genera igual: no vale la pena fallar por eso.
-    loadLogo().catch(() => null),
-  ]);
-
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+/**
+ * Dibuja el contenido de un formulario en `doc` a partir de la pagina actual.
+ * No crea el doc ni lo guarda: eso lo hace el llamador.
+ */
+function renderFormContent(doc, autoTable, form, responses, logo) {
+  const startPage = doc.getNumberOfPages();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = pageWidth - MARGIN * 2;
@@ -560,11 +558,13 @@ export async function downloadResultsPdf(form, responses) {
 
   // --- Encabezado (desde la 2) y pie en todas las paginas ------------------------
 
-  const pages = doc.getNumberOfPages();
-  for (let page = 1; page <= pages; page++) {
+  const endPage = doc.getNumberOfPages();
+  const formPages = endPage - startPage + 1;
+  for (let page = startPage; page <= endPage; page++) {
     doc.setPage(page);
+    const pageNum = page - startPage + 1;
 
-    if (page > 1) {
+    if (page > startPage) {
       doc.setFillColor(...TEXT);
       doc.rect(0, 0, pageWidth, PAGE_HEADER, "F");
 
@@ -586,9 +586,45 @@ export async function downloadResultsPdf(form, responses) {
     doc.setLineWidth(0.2);
     doc.line(MARGIN, pageHeight - 12, pageWidth - MARGIN, pageHeight - 12);
     doc.text(fit(`${form.title || "Formulario"} · Creado por ${createdBy}`, contentWidth - 30), MARGIN, pageHeight - 7);
-    doc.text(`Pagina ${page} de ${pages}`, pageWidth - MARGIN, pageHeight - 7, { align: "right" });
+    doc.text(`Pagina ${pageNum} de ${formPages}`, pageWidth - MARGIN, pageHeight - 7, { align: "right" });
   }
+}
+
+export async function downloadResultsPdf(form, responses) {
+  const [{ jsPDF }, { autoTable }, logo] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+    loadLogo().catch(() => null),
+  ]);
+
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  renderFormContent(doc, autoTable, form, responses, logo);
 
   const stamp = new Date().toISOString().slice(0, 10);
   doc.save(`Respuestas - ${safeFileName(form.title)} - ${stamp}.pdf`);
+}
+
+/**
+ * Genera un PDF con un informe por formulario, cada uno en su propia seccion.
+ * Recibe un array de { form, responses }.
+ */
+export async function downloadMultipleResultsPdf(formsWithResponses) {
+  const [{ jsPDF }, { autoTable }, logo] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+    loadLogo().catch(() => null),
+  ]);
+
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+  for (let i = 0; i < formsWithResponses.length; i++) {
+    if (i > 0) doc.addPage();
+    const { form, responses } = formsWithResponses[i];
+    renderFormContent(doc, autoTable, form, responses, logo);
+  }
+
+  const today = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  doc.save(`Resultados combinados - ${stamp}.pdf`);
 }

@@ -80,7 +80,7 @@ public interface IFormStore
     Question? DuplicateQuestion(string formId, string questionId);
     /// <param name="jumpTo">Salto de la pregunta: null no lo toca, vacio lo quita.</param>
     /// <param name="scaleMax">Estrellas; solo se aplica a las preguntas rating.</param>
-    Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax);
+    Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax, List<MatrixRow>? rows = null);
 
     /// <summary>
     /// Al borrar una pregunta, los saltos que llevaban a ella se quitan: quien

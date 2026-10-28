@@ -97,6 +97,9 @@ public class QuestionRow
     /// <summary>Estrellas de las preguntas rating. NULL en los demas tipos.</summary>
     public int? ScaleMax { get; set; }
 
+    /// <summary>Filas de una pregunta matrix, serializadas como JSON. NULL en otros tipos.</summary>
+    public string? Rows { get; set; }
+
     /// <summary>
     /// Borrado logico. Una pregunta con respuestas no se puede borrar de verdad:
     /// ResponseAnswers la referencia y SQL Server no permite cascada por ese

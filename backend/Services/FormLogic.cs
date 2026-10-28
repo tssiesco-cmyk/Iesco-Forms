@@ -99,6 +99,7 @@ public static class FormLogic
     /// </summary>
     public static string? InvalidValueReason(Question question, JsonNode? valor)
     {
+        if (question.Type == QuestionType.Matrix) return InvalidMatrixReason(question, valor);
         if (valor is null || valor is JsonArray) return null;
 
         var texto = valor.GetValueKind() == JsonValueKind.String ? valor.GetValue<string>() : valor.ToString();
@@ -134,4 +135,29 @@ public static class FormLogic
                 return null;
         }
     }
+
+    /// <summary>La matriz llega como {"filaId":"columnaId"}; cada par debe existir en la pregunta.</summary>
+    private static string? InvalidMatrixReason(Question question, JsonNode? valor)
+    {
+        if (valor is null) return null;
+        if (valor is not JsonObject objeto) return "debe ser una tabla de respuestas";
+
+        var filas = question.Rows.Select(r => r.Id).ToHashSet();
+        var columnas = question.Options.Select(o => o.Id).ToHashSet();
+
+        foreach (var (filaId, columna) in objeto)
+        {
+            if (!filas.Contains(filaId)) return "tiene una fila que no existe";
+            if (columna is not JsonValue v || v.GetValueKind() != JsonValueKind.String
+                || !columnas.Contains(v.GetValue<string>()))
+                return "tiene una columna que no existe";
+        }
+
+        return null;
+    }
+
+    /// <summary>Una matriz obligatoria cuenta como contestada solo si tiene todas sus filas.</summary>
+    public static bool IsMatrixComplete(Question question, JsonNode? valor) =>
+        question.Type != QuestionType.Matrix
+        || (valor is JsonObject objeto && question.Rows.All(r => objeto[r.Id] is not null));
 }

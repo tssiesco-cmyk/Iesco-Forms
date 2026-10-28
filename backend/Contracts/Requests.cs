@@ -41,13 +41,16 @@ public record AddQuestionRequest([Required] string Type);
 /// JumpTo: vacio quita el salto, "end" termina el formulario y cualquier otro
 /// valor es el id de una pregunta del mismo formulario.
 /// </summary>
+public record MatrixRowRequest(string Id, [MaxLength(500)] string Text);
+
 public record UpdateQuestionRequest(
     [MaxLength(500)] string? Title,
     [MaxLength(1000)] string? Description,
     bool? Required,
     string? TextCase,
     [MaxLength(36)] string? JumpTo,
-    [Range(QuestionType.MinScale, QuestionType.MaxScale)] int? ScaleMax);
+    [Range(QuestionType.MinScale, QuestionType.MaxScale)] int? ScaleMax,
+    List<MatrixRowRequest>? Rows);
 
 public record ReorderQuestionsRequest(int FromIndex, int ToIndex);
 

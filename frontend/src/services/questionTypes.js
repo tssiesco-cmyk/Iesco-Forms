@@ -19,6 +19,7 @@ export const QUESTION_TYPES = [
   { value: "nps", label: "NPS (0 a 10)" },
   { value: "number", label: "Numero" },
   { value: "date", label: "Fecha" },
+  { value: "matrix", label: "Matriz" },
 ];
 
 export const TYPE_LABELS = Object.fromEntries(QUESTION_TYPES.map((t) => [t.value, t.label]));
@@ -88,7 +89,17 @@ export function hasLogic(questions) {
 export function isAnswered(value) {
   if (value === null || value === undefined) return false;
   if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
   return value.toString().trim() !== "";
+}
+
+/** Para matrices obligatorias: todas las filas deben tener una seleccion. */
+export function matrixIsComplete(question, value) {
+  if (question.type !== "matrix") return true;
+  const rows = question.rows || [];
+  if (rows.length === 0) return true;
+  if (!value || typeof value !== "object") return false;
+  return rows.every((r) => value[r.id]);
 }
 
 /**
@@ -181,6 +192,14 @@ export function answerText(question, value, empty = "") {
     const byId = Object.fromEntries(question.options.map((o) => [o.id, o.text]));
     const ids = Array.isArray(value) ? value : [value];
     return ids.map((id) => byId[id] ?? "(opcion eliminada)").join("; ");
+  }
+
+  if (question.type === "matrix") {
+    const colById = Object.fromEntries((question.options || []).map((o) => [o.id, o.text]));
+    return (question.rows || [])
+      .filter((r) => value[r.id])
+      .map((r) => `${r.text}: ${colById[value[r.id]] ?? "(eliminada)"}`)
+      .join("; ") || empty;
   }
 
   if (question.type === "rating") return `${value} / ${question.scaleMax || DEFAULT_SCALE}`;

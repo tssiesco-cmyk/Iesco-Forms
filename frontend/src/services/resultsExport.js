@@ -155,6 +155,55 @@ function saveBlob(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** Nombre de hoja Excel: max 31 chars, sin caracteres prohibidos. */
+function sheetName(form, index) {
+  const clean = (form.title || `Form${index + 1}`)
+    .replace(/[:\\/?*[\]]/g, "")
+    .trim()
+    .slice(0, 31) || `Form${index + 1}`;
+  return clean;
+}
+
+/**
+ * Descarga un Excel con una hoja por formulario.
+ * Recibe un array de { form, responses }.
+ */
+export async function downloadMultipleResultsXlsx(formsWithResponses) {
+  const { default: writeXlsxFile } = await import("write-excel-file/browser");
+  const headerStyle = { fontWeight: "bold", backgroundColor: "#F0F0F4", wrap: true, alignVertical: "top" };
+
+  const sheets = formsWithResponses.map(({ form, responses }, index) => {
+    const { header, rows } = buildTable(form, responses);
+    const columns = header.map((_, i) => ({ width: i === 0 ? 6 : i === 1 ? 18 : 28 }));
+
+    const data = [
+      header.map((value) => ({ value, ...headerStyle })),
+      ...rows.map((row) => row.map((cell) => {
+        if (cell.value === "" || cell.value === null) return null;
+        if (cell.kind === "number") return { value: cell.value, type: Number };
+        if (cell.kind === "datetime") {
+          const local = new Date(cell.value.getTime() - cell.value.getTimezoneOffset() * 60000);
+          return { value: local, type: Date, format: "dd/mm/yyyy hh:mm" };
+        }
+        if (cell.kind === "date") {
+          const [y, m, d] = cell.value.split("-").map(Number);
+          return { value: new Date(Date.UTC(y, m - 1, d)), type: Date, format: "dd/mm/yyyy" };
+        }
+        return { value: String(cell.value), type: String, format: "@", wrap: true, alignVertical: "top" };
+      })),
+    ];
+
+    return { data, sheet: sheetName(form, index), columns, stickyRowsCount: 1 };
+  });
+
+  const blob = await writeXlsxFile(sheets).toBlob();
+
+  const today = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  saveBlob(blob, `resultados_combinados_${stamp}.xlsx`);
+}
+
 export async function downloadResultsXlsx(form, responses) {
   const { default: writeXlsxFile } = await import("write-excel-file/browser");
   const { header, rows } = buildTable(form, responses);

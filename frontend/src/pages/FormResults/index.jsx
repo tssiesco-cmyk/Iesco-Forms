@@ -905,6 +905,26 @@ function FormResults() {
       .filter((r) => hasValue(r.answers[question.id]))
       .map((r) => ({ text: answerText(question, r.answers[question.id]), date: r.submittedAt }));
 
+  const getMatrixStats = (question) => {
+    const rows = question.rows || [];
+    const cols = question.options || [];
+    const counts = {};
+    rows.forEach((r) => {
+      counts[r.id] = {};
+      cols.forEach((c) => { counts[r.id][c.id] = 0; });
+    });
+    formResponses.forEach((resp) => {
+      const answer = resp.answers[question.id];
+      if (!answer || typeof answer !== "object") return;
+      rows.forEach((r) => {
+        const colId = answer[r.id];
+        if (colId && counts[r.id] && counts[r.id][colId] !== undefined) counts[r.id][colId]++;
+      });
+    });
+    const answeredCount = formResponses.filter((r) => hasValue(r.answers[question.id])).length;
+    return { rows, cols, counts, answeredCount };
+  };
+
   const getRespondentName = (response) => {
     const r = response.respondent || {};
     if (r.name) return r.name;
@@ -1000,6 +1020,43 @@ function FormResults() {
         <ChipList>
           {ids.map((optId) => <Chip key={optId}>{optionText(question, optId)}</Chip>)}
         </ChipList>
+      );
+    }
+
+    if (question.type === "matrix") {
+      const colById = Object.fromEntries((question.options || []).map((o) => [o.id, o.text]));
+      return (
+        <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", width: "100%" }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "4px 10px 4px 0", textAlign: "left", opacity: 0.6, fontWeight: 500 }} />
+              {(question.options || []).map((col) => (
+                <th key={col.id} style={{ padding: "4px 8px", textAlign: "center", fontWeight: 600, opacity: 0.8 }}>
+                  {col.text}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(question.rows || []).map((row) => {
+              const selectedCol = answer?.[row.id];
+              return (
+                <tr key={row.id}>
+                  <td style={{ padding: "4px 10px 4px 0", borderTop: "1px solid var(--border, #E8E8ED)" }}>
+                    {row.text}
+                  </td>
+                  {(question.options || []).map((col) => (
+                    <td key={col.id} style={{ textAlign: "center", borderTop: "1px solid var(--border, #E8E8ED)" }}>
+                      {selectedCol === col.id ? (
+                        <Chip>{col.text}</Chip>
+                      ) : null}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       );
     }
 
@@ -1140,10 +1197,12 @@ function FormResults() {
             </KpiGrid>
 
             {form.questions.map((q, i) => {
-              const isChoice = isChartable(q.type);
+              const isMatrix = q.type === "matrix";
+              const isChoice = !isMatrix && isChartable(q.type);
               const stats = isChoice ? getChoiceStats(q) : [];
               const totalForQ = stats.reduce((a, b) => a + b.count, 0);
-              const textResps = !isChoice ? getTextResponses(q) : [];
+              const matrixStats = isMatrix ? getMatrixStats(q) : null;
+              const textResps = !isChoice && !isMatrix ? getTextResponses(q) : [];
               const avg = ["rating", "nps", "number"].includes(q.type) ? average(q, formResponses) : null;
               const nps = q.type === "nps" ? npsScore(q, formResponses) : null;
 
@@ -1154,9 +1213,11 @@ function FormResults() {
                     <QType>{typeLabels[q.type]}</QType>
                   </QHeader>
                   <QResponseCount>
-                    {isChoice
-                      ? `${formResponses.filter((r) => hasValue(r.answers[q.id])).length} respuestas`
-                      : `${textResps.length} respuestas`}
+                    {isMatrix
+                      ? `${matrixStats.answeredCount} respuestas`
+                      : isChoice
+                        ? `${formResponses.filter((r) => hasValue(r.answers[q.id])).length} respuestas`
+                        : `${textResps.length} respuestas`}
                   </QResponseCount>
 
                   {(avg !== null || nps) && (
@@ -1213,7 +1274,50 @@ function FormResults() {
                     </BarList>
                   )}
 
-                  {!isChoice && (
+                  {isMatrix && matrixStats && (
+                    matrixStats.answeredCount > 0 ? (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", width: "100%" }}>
+                          <thead>
+                            <tr>
+                              <th style={{ padding: "4px 10px 4px 0", textAlign: "left", fontWeight: 500, opacity: 0.6 }} />
+                              {matrixStats.cols.map((col) => (
+                                <th key={col.id} style={{ padding: "4px 8px", textAlign: "center", fontWeight: 600 }}>
+                                  {col.text}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {matrixStats.rows.map((row) => {
+                              const rowTotal = matrixStats.cols.reduce((s, c) => s + (matrixStats.counts[row.id]?.[c.id] || 0), 0) || 1;
+                              return (
+                                <tr key={row.id}>
+                                  <td style={{ padding: "6px 10px 6px 0", borderTop: "1px solid var(--border, #E8E8ED)" }}>
+                                    {row.text}
+                                  </td>
+                                  {matrixStats.cols.map((col, ci) => {
+                                    const count = matrixStats.counts[row.id]?.[col.id] || 0;
+                                    const pct = Math.round((count / rowTotal) * 100);
+                                    return (
+                                      <td key={col.id} style={{ textAlign: "center", borderTop: "1px solid var(--border, #E8E8ED)", padding: "6px 8px" }}>
+                                        <strong>{count}</strong>
+                                        <span style={{ opacity: 0.55, fontSize: "0.78em", marginLeft: 3 }}>{pct}%</span>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <EmptyMsg>Sin respuestas</EmptyMsg>
+                    )
+                  )}
+
+                  {!isChoice && !isMatrix && (
                     textResps.length > 0 ? (
                       <TextList>
                         {textResps.map((r, j) => (

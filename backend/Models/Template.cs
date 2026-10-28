@@ -104,6 +104,9 @@ public class TemplateQuestion
 
     /// <summary>Salto de cada opcion, en el mismo orden que Options y con el formato de JumpTo.</summary>
     public List<string> OptionJumps { get; set; } = [];
+
+    /// <summary>Textos de las filas de una matriz. Los ids se generan al crear el formulario.</summary>
+    public List<string> Rows { get; set; } = [];
 }
 
 public class TemplateIntroField

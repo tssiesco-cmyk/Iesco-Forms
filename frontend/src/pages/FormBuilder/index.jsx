@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useLayoutEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import styled, { css } from "styled-components";
 import {
@@ -7,7 +7,7 @@ import {
   FiEye, FiX, FiBarChart2, FiUser, FiToggleLeft, FiToggleRight, FiMail, FiPhone,
   FiSend, FiRotateCcw, FiCheck, FiAlertCircle, FiImage, FiUpload,
   FiCopy, FiChevronsLeft, FiChevronsRight, FiShare2, FiLayout, FiClock, FiBookmark,
-  FiList, FiThumbsUp, FiStar, FiTrendingUp, FiHash, FiCalendar, FiGitBranch, FiCornerDownRight
+  FiList, FiThumbsUp, FiStar, FiTrendingUp, FiHash, FiCalendar, FiGitBranch, FiCornerDownRight, FiGrid
 } from "react-icons/fi";
 import {
   TYPE_LABELS, TEXT_TYPES, JUMP_END, SCALE_CHOICES, DEFAULT_SCALE,
@@ -95,22 +95,30 @@ const HeaderTitles = styled.div`
   gap: 2px;
 `;
 
-const FormTitle = styled.input`
+const FormTitle = styled.textarea`
   width: 100%;
   font-size: ${({ theme }) => theme.fontSizes.lg};
   font-weight: ${({ theme }) => theme.fontWeights.semibold};
   border: none;
   background: transparent;
   color: ${({ theme }) => theme.colors.text};
+  resize: none;
+  overflow: hidden;
+  line-height: 1.35;
+  font-family: inherit;
   &::placeholder { color: ${({ theme }) => theme.colors.textMuted}; }
 `;
 
-const FormSubtitle = styled.input`
+const FormSubtitle = styled.textarea`
   width: 100%;
   font-size: ${({ theme }) => theme.fontSizes.sm};
   border: none;
   background: transparent;
   color: ${({ theme }) => theme.colors.textSecondary};
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  font-family: inherit;
   &::placeholder { color: ${({ theme }) => theme.colors.textMuted}; }
 `;
 
@@ -457,7 +465,7 @@ const QHeader = styled.div`
   gap: 12px;
 `;
 
-const QTitleInput = styled.input`
+const QTitleInput = styled.textarea`
   flex: 1;
   font-size: ${({ theme }) => theme.fontSizes.xl};
   font-weight: ${({ theme }) => theme.fontWeights.semibold};
@@ -467,6 +475,10 @@ const QTitleInput = styled.input`
   background: transparent;
   color: ${({ theme }) => theme.colors.text};
   transition: border-color 0.15s;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.35;
+  font-family: inherit;
 
   &:focus {
     border-bottom-color: ${({ theme }) => theme.colors.primary};
@@ -475,13 +487,17 @@ const QTitleInput = styled.input`
   &::placeholder { color: ${({ theme }) => theme.colors.textMuted}; }
 `;
 
-const QDescInput = styled.input`
+const QDescInput = styled.textarea`
   width: 100%;
   font-size: ${({ theme }) => theme.fontSizes.base};
   border: none;
   background: transparent;
   color: ${({ theme }) => theme.colors.textSecondary};
   margin-bottom: 20px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  font-family: inherit;
 
   &::placeholder { color: ${({ theme }) => theme.colors.textMuted}; }
 `;
@@ -991,6 +1007,7 @@ const typeIcons = {
   nps: <FiTrendingUp size={14} />,
   number: <FiHash size={14} />,
   date: <FiCalendar size={14} />,
+  matrix: <FiGrid size={14} />,
 };
 
 /** Botones de "Agregar pregunta", con el nombre corto que cabe en la cuadricula. */
@@ -1005,6 +1022,7 @@ const addButtons = [
   { type: "nps", label: "NPS" },
   { type: "number", label: "Numero" },
   { type: "date", label: "Fecha" },
+  { type: "matrix", label: "Matriz" },
 ];
 
 /**
@@ -1073,6 +1091,10 @@ function FormBuilder() {
   const fileInputRef = useRef(null);
   const questionFileInputRef = useRef(null);
   const introFileInputRef = useRef(null);
+  const qTitleInputRef = useRef(null);
+  const qDescInputRef = useRef(null);
+  const formTitleRef = useRef(null);
+  const formSubtitleRef = useRef(null);
 
   const handlePickFile = async (event) => {
     const file = event.target.files?.[0];
@@ -1114,6 +1136,18 @@ function FormBuilder() {
       ? selectedQuestionId
       : questions[0]?.id ?? null;
   const setActiveQuestionId = setSelectedQuestionId;
+  const _activeQ = questions.find((q) => q.id === activeQuestionId);
+  const _activeTitle = _activeQ?.title;
+  const _activeDesc = _activeQ?.description;
+
+  useLayoutEffect(() => {
+    for (const ref of [qTitleInputRef, qDescInputRef, formTitleRef, formSubtitleRef]) {
+      const el = ref.current;
+      if (!el) continue;
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [activeQuestionId, _activeTitle, _activeDesc, form?.title, form?.description]);
 
   if (status === "loading") {
     return (
@@ -1266,14 +1300,26 @@ function FormBuilder() {
           </BackButton>
           <HeaderTitles>
             <FormTitle
+              ref={formTitleRef}
               value={form.title}
-              onChange={(e) => updateForm(id, { title: e.target.value })}
+              rows={1}
+              onChange={(e) => {
+                updateForm(id, { title: e.target.value });
+                e.target.style.height = "auto";
+                e.target.style.height = `${e.target.scrollHeight}px`;
+              }}
               placeholder="Titulo del formulario"
               aria-label="Titulo del formulario"
             />
             <FormSubtitle
+              ref={formSubtitleRef}
               value={form.description || ""}
-              onChange={(e) => updateForm(id, { description: e.target.value })}
+              rows={1}
+              onChange={(e) => {
+                updateForm(id, { description: e.target.value });
+                e.target.style.height = "auto";
+                e.target.style.height = `${e.target.scrollHeight}px`;
+              }}
               placeholder="Subtitulo (opcional)"
               aria-label="Subtitulo del formulario"
             />
@@ -1623,10 +1669,14 @@ function FormBuilder() {
               <QEditor>
                 <QHeader>
                   <QTitleInput
+                    ref={qTitleInputRef}
                     value={activeQuestion.title}
-                    onChange={(e) =>
-                      updateQuestion(id, activeQuestion.id, { title: e.target.value })
-                    }
+                    rows={1}
+                    onChange={(e) => {
+                      updateQuestion(id, activeQuestion.id, { title: e.target.value });
+                      e.target.style.height = "auto";
+                      e.target.style.height = `${e.target.scrollHeight}px`;
+                    }}
                     placeholder="Escribe tu pregunta aqui..."
                   />
                   <QActions>
@@ -1646,10 +1696,14 @@ function FormBuilder() {
                 </QHeader>
 
                 <QDescInput
+                  ref={qDescInputRef}
                   value={activeQuestion.description}
-                  onChange={(e) =>
-                    updateQuestion(id, activeQuestion.id, { description: e.target.value })
-                  }
+                  rows={1}
+                  onChange={(e) => {
+                    updateQuestion(id, activeQuestion.id, { description: e.target.value });
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${e.target.scrollHeight}px`;
+                  }}
                   placeholder="Descripcion (opcional)"
                 />
 
@@ -1763,6 +1817,72 @@ function FormBuilder() {
                     disabled
                     placeholder="Respuesta larga del usuario..."
                   />
+                )}
+
+                {activeQuestion.type === "matrix" && (
+                  <>
+                    <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #9E9EA7)", marginBottom: 6, marginTop: 0 }}>
+                      Columnas (opciones de calificacion)
+                    </p>
+                    <OptionsList>
+                      {activeQuestion.options.map((opt, i) => (
+                        <OptionRow key={opt.id}>
+                          <OptionInput
+                            value={opt.text}
+                            onChange={(e) => updateOption(id, activeQuestion.id, opt.id, e.target.value)}
+                            placeholder={`Columna ${i + 1}`}
+                          />
+                          {activeQuestion.options.length > 1 && (
+                            <RemoveOptionBtn onClick={() => deleteOption(id, activeQuestion.id, opt.id)}>
+                              <FiX size={14} />
+                            </RemoveOptionBtn>
+                          )}
+                        </OptionRow>
+                      ))}
+                    </OptionsList>
+                    <AddOptionBtn onClick={() => addOption(id, activeQuestion.id)}>
+                      <FiPlus size={14} /> Agregar columna
+                    </AddOptionBtn>
+
+                    <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #9E9EA7)", margin: "16px 0 6px" }}>
+                      Filas (criterios a evaluar)
+                    </p>
+                    <OptionsList>
+                      {(activeQuestion.rows || []).map((row, i) => (
+                        <OptionRow key={row.id}>
+                          <OptionInput
+                            value={row.text}
+                            onChange={(e) => {
+                              const newRows = activeQuestion.rows.map((r) =>
+                                r.id === row.id ? { ...r, text: e.target.value } : r
+                              );
+                              updateQuestion(id, activeQuestion.id, { rows: newRows });
+                            }}
+                            placeholder={`Criterio ${i + 1}`}
+                          />
+                          {(activeQuestion.rows || []).length > 1 && (
+                            <RemoveOptionBtn
+                              onClick={() => {
+                                const newRows = activeQuestion.rows.filter((r) => r.id !== row.id);
+                                updateQuestion(id, activeQuestion.id, { rows: newRows });
+                              }}
+                            >
+                              <FiX size={14} />
+                            </RemoveOptionBtn>
+                          )}
+                        </OptionRow>
+                      ))}
+                    </OptionsList>
+                    <AddOptionBtn
+                      onClick={() => {
+                        const newRow = { id: crypto.randomUUID(), text: "" };
+                        const newRows = [...(activeQuestion.rows || []), newRow];
+                        updateQuestion(id, activeQuestion.id, { rows: newRows });
+                      }}
+                    >
+                      <FiPlus size={14} /> Agregar fila
+                    </AddOptionBtn>
+                  </>
                 )}
 
                 {form.backgroundPerQuestion && (
