@@ -3,6 +3,7 @@ import { downloadResultsPdf } from "../../services/resultsPdf";
 import { downloadResultsCsv, downloadResultsXlsx } from "../../services/resultsExport";
 import {
   TYPE_LABELS, answerText, average, chartQuestion, hasOptions, isChartable, isSingleOption, npsScore,
+  NUMERIC_TYPES,
 } from "../../services/questionTypes";
 import { CHART_COLORS } from "../../styles/chartColors";
 import Spinner from "../../components/atoms/Spinner";
@@ -1203,7 +1204,7 @@ function FormResults() {
               const totalForQ = stats.reduce((a, b) => a + b.count, 0);
               const matrixStats = isMatrix ? getMatrixStats(q) : null;
               const textResps = !isChoice && !isMatrix ? getTextResponses(q) : [];
-              const avg = ["rating", "nps", "number"].includes(q.type) ? average(q, formResponses) : null;
+              const avg = NUMERIC_TYPES.includes(q.type) ? average(q, formResponses) : null;
               const nps = q.type === "nps" ? npsScore(q, formResponses) : null;
 
               return (

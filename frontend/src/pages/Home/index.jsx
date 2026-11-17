@@ -6,6 +6,7 @@ import {
   FiTrendingUp, FiArrowRight
 } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
+import { useAuth } from "../../context/AuthContext";
 import StatCard from "../../components/molecules/StatCard";
 import FormCard from "../../components/molecules/FormCard";
 import { coverImageOf } from "../../services/formCover";
@@ -105,8 +106,17 @@ const CardsGrid = styled.div`
   }
 `;
 
+function greetingFor(hour) {
+  if (hour < 12) return "Buenos dias";
+  if (hour < 19) return "Buenas tardes";
+  return "Buenas noches";
+}
+
 function Home() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const firstName = user?.displayName?.trim().split(/\s+/)[0];
+  const greeting = greetingFor(new Date().getHours());
   const { forms, status, error, reload, createForm } = useForms();
   const [creating, setCreating] = useState(false);
 
@@ -137,7 +147,7 @@ function Home() {
   return (
     <>
       <Welcome>
-        <WelcomeTitle>Buenos dias, Adriano</WelcomeTitle>
+        <WelcomeTitle>{firstName ? `${greeting}, ${firstName}` : greeting}</WelcomeTitle>
         <WelcomeText>Crea formularios, recopila respuestas y analiza resultados.</WelcomeText>
       </Welcome>
 

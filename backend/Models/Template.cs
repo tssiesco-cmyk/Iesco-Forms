@@ -89,8 +89,13 @@ public class TemplateQuestion
     public string TextCase { get; set; } = QuestionTextCase.Normal;
     public string BackgroundImage { get; set; } = string.Empty;
 
-    /// <summary>Estrellas de las preguntas rating.</summary>
+    /// <summary>Estrellas de las preguntas rating o tope de una escala.</summary>
     public int? ScaleMax { get; set; }
+
+    /// <summary>Inicio y textos de los extremos de una escala.</summary>
+    public int? ScaleMin { get; set; }
+    public string ScaleMinLabel { get; set; } = string.Empty;
+    public string ScaleMaxLabel { get; set; } = string.Empty;
 
     /// <summary>
     /// Salto de la pregunta. Como los ids se generan al crear el formulario,

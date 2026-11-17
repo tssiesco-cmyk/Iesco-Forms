@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import styled, { keyframes, css } from "styled-components";
-import { FiArrowRight, FiArrowLeft, FiCheck, FiX, FiAlertTriangle, FiStar } from "react-icons/fi";
+import { FiArrowRight, FiArrowLeft, FiCheck, FiX, FiAlertTriangle, FiStar, FiSearch } from "react-icons/fi";
 import { useForms } from "../../context/FormContext";
 import { useAuth } from "../../context/AuthContext";
 import { formsApi, linksApi } from "../../services/api";
 import Spinner from "../../components/atoms/Spinner";
 import {
-  DEFAULT_SCALE, isAnswered, isSingleOption, matrixIsComplete, nextQuestionIndex, visitedQuestionIds,
+  DEFAULT_SCALE, isAnswered, isSingleOption, matrixIsComplete, nextQuestionIndex, scaleValues, visitedQuestionIds,
 } from "../../services/questionTypes";
 
 /* --- ANIMATIONS --- */
@@ -280,24 +280,180 @@ const OptionCheckmark = styled.div`
   color: ${({ $selected }) => $selected ? "var(--fv-on-accent)" : "transparent"};
 `;
 
-/* Lista desplegable: mismo trazo que los campos de texto. */
-const DropdownSelect = styled.select`
-  width: 100%;
-  background: var(--fv-surface);
+/* Lista desplegable: buscador arriba y las opciones como pastillas debajo.
+   El <select> nativo no se puede estilizar y sobre una foto se veia ajeno. */
+const ComboCard = styled.div`
   border: 1px solid var(--fv-border);
-  border-radius: 8px;
-  color: var(--fv-text);
-  font-size: 18px;
-  padding: 14px 16px;
-  outline: none;
-  font-family: inherit;
-  cursor: pointer;
-
-  &:focus { border-color: var(--fv-accent); }
-
-  /* La lista que abre el navegador no hereda el fondo transparente. */
-  option { color: #191919; background: #FFFFFF; }
+  border-radius: 16px;
+  background: var(--fv-surface);
+  backdrop-filter: blur(10px);
+  padding: 14px 18px 16px;
 `;
+
+const ComboSearch = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 2px solid var(--fv-border);
+  margin-bottom: 14px;
+  transition: border-color 0.15s;
+
+  &:focus-within { border-bottom-color: var(--fv-accent); }
+
+  input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--fv-text);
+    font-size: 20px;
+    font-family: inherit;
+    padding: 8px 0 10px;
+    outline: none;
+  }
+
+  input::placeholder { color: var(--fv-muted); }
+
+  svg { flex-shrink: 0; color: var(--fv-secondary); }
+`;
+
+const ComboList = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+`;
+
+const ComboOption = styled.li`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: 1px solid ${({ $selected }) => ($selected ? "var(--fv-accent)" : "var(--fv-border)")};
+  background: ${({ $selected, $active }) =>
+    $selected ? "var(--fv-accent-soft)" : $active ? "var(--fv-surface-alt)" : "transparent"};
+  color: var(--fv-text);
+  font-size: 15px;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+
+  &:hover {
+    background: ${({ $selected }) => ($selected ? "var(--fv-accent-soft)" : "var(--fv-surface-alt)")};
+    border-color: var(--fv-border-strong);
+  }
+
+  svg { flex-shrink: 0; }
+`;
+
+const ComboFooter = styled.p`
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--fv-muted);
+  text-align: right;
+`;
+
+const ComboEmpty = styled.p`
+  margin: 4px 0;
+  font-size: 15px;
+  color: var(--fv-muted);
+`;
+
+/** Sin tildes ni mayusculas: "gestion" encuentra "GESTIÓN". */
+const normalizeText = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+function DropdownCombo({ options, value, onSelect }) {
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(-1);
+  const listRef = useRef(null);
+
+  const visible = query
+    ? options.filter((o) => normalizeText(o.text).includes(normalizeText(query)))
+    : options;
+
+  const choose = (option) => {
+    setQuery("");
+    setActive(-1);
+    onSelect(option.id);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (visible.length === 0) return;
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      const next = active < 0
+        ? (step > 0 ? 0 : visible.length - 1)
+        : (active + step + visible.length) % visible.length;
+      setActive(next);
+      listRef.current?.children[next]?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter" && visible[active]) {
+      // Sin esto el Enter tambien llegaria a la pagina y saltaria de pregunta.
+      e.preventDefault();
+      e.stopPropagation();
+      choose(visible[active]);
+    } else if (e.key === "Escape") {
+      setQuery("");
+      setActive(-1);
+    }
+  };
+
+  return (
+    <ComboCard>
+      <ComboSearch>
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(e.target.value ? 0 : -1);
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder="Escribe o selecciona una opción"
+          role="combobox"
+          aria-expanded="true"
+          aria-autocomplete="list"
+          autoFocus
+        />
+        <FiSearch size={18} />
+      </ComboSearch>
+
+      {visible.length > 0 ? (
+        <ComboList ref={listRef} role="listbox">
+          {visible.map((option, i) => {
+            const selected = option.id === value;
+            return (
+              <ComboOption
+                key={option.id}
+                role="option"
+                aria-selected={selected}
+                $selected={selected}
+                $active={i === active}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => choose(option)}
+              >
+                <span>{option.text}</span>
+                {selected && <FiCheck size={16} />}
+              </ComboOption>
+            );
+          })}
+        </ComboList>
+      ) : (
+        <ComboEmpty>Sin coincidencias</ComboEmpty>
+      )}
+
+      <ComboFooter>
+        {options.length} {options.length === 1 ? "opción" : "opciones"} en la lista
+      </ComboFooter>
+    </ComboCard>
+  );
+}
 
 const ScaleRow = styled.div`
   display: flex;
@@ -1122,16 +1278,12 @@ function FormView() {
           )}
 
           {question.type === "dropdown" && (
-            <DropdownSelect
-              value={currentAnswer || ""}
-              onChange={(e) => setAnswer(e.target.value)}
-              autoFocus
-            >
-              <option value="">Elige una opcion...</option>
-              {question.options.map((opt) => (
-                <option key={opt.id} value={opt.id}>{opt.text}</option>
-              ))}
-            </DropdownSelect>
+            <DropdownCombo
+              key={question.id}
+              options={question.options}
+              value={currentAnswer}
+              onSelect={selectAndAdvance}
+            />
           )}
 
           {question.type === "rating" && (
@@ -1176,6 +1328,33 @@ function FormView() {
                 <span>Nada probable</span>
                 <span>Muy probable</span>
               </ScaleLegend>
+            </>
+          )}
+
+          {question.type === "scale" && (
+            <>
+              <ScaleRow role="radiogroup" aria-label={question.title || "Escala"}>
+                {scaleValues(question).map((n) => {
+                  const value = String(n);
+                  return (
+                    <NpsButton
+                      key={value}
+                      role="radio"
+                      aria-checked={currentAnswer === value}
+                      $selected={currentAnswer === value}
+                      onClick={() => selectAndAdvance(value)}
+                    >
+                      {n}
+                    </NpsButton>
+                  );
+                })}
+              </ScaleRow>
+              {(question.scaleMinLabel || question.scaleMaxLabel) && (
+                <ScaleLegend>
+                  <span>{question.scaleMinLabel}</span>
+                  <span>{question.scaleMaxLabel}</span>
+                </ScaleLegend>
+              )}
             </>
           )}
 

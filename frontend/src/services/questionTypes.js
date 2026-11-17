@@ -20,6 +20,7 @@ export const QUESTION_TYPES = [
   { value: "number", label: "Numero" },
   { value: "date", label: "Fecha" },
   { value: "matrix", label: "Matriz" },
+  { value: "scale", label: "Escala" },
 ];
 
 export const TYPE_LABELS = Object.fromEntries(QUESTION_TYPES.map((t) => [t.value, t.label]));
@@ -40,6 +41,12 @@ export const hasEditableOptions = (type) => hasOptions(type) && type !== "yes_no
 
 export const DEFAULT_SCALE = 5;
 export const SCALE_CHOICES = [3, 4, 5, 6, 7, 8, 9, 10];
+
+/** Inicio y fin de una pregunta "scale". */
+export const scaleRange = (question) => ({
+  min: question.scaleMin ?? 0,
+  max: question.scaleMax ?? 10,
+});
 
 /** Salto que termina el formulario. */
 export const JUMP_END = "end";
@@ -108,6 +115,10 @@ export function matrixIsComplete(question, value) {
  */
 export function scaleValues(question) {
   if (question.type === "nps") return Array.from({ length: 11 }, (_, i) => i);
+  if (question.type === "scale") {
+    const { min, max } = scaleRange(question);
+    return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  }
   if (question.type === "rating") {
     const max = question.scaleMax || DEFAULT_SCALE;
     return Array.from({ length: max }, (_, i) => i + 1);
@@ -115,7 +126,10 @@ export function scaleValues(question) {
   return [];
 }
 
-export const isScale = (type) => type === "rating" || type === "nps";
+export const isScale = (type) => type === "rating" || type === "nps" || type === "scale";
+
+/** Tipos cuya respuesta es un numero y admiten promedio. */
+export const NUMERIC_TYPES = ["rating", "nps", "number", "scale"];
 
 /**
  * La pregunta tal como la necesitan los graficos: las de escala pasan a tener

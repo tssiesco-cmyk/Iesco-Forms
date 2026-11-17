@@ -168,7 +168,12 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 TextCase = QuestionTextCase.IsValid(pregunta.TextCase) ? pregunta.TextCase : QuestionTextCase.Normal,
                 BackgroundImage = pregunta.BackgroundImage,
                 JumpTo = FormLogic.JumpFromTemplate(pregunta.JumpTo, idsNuevos),
-                ScaleMax = pregunta.Type == QuestionType.Rating ? pregunta.ScaleMax ?? QuestionType.DefaultScale : null,
+                ScaleMax = pregunta.Type == QuestionType.Rating ? pregunta.ScaleMax ?? QuestionType.DefaultScale
+                    : pregunta.Type == QuestionType.Scale ? pregunta.ScaleMax ?? QuestionType.MaxScale
+                    : null,
+                ScaleMin = pregunta.Type == QuestionType.Scale ? pregunta.ScaleMin ?? 0 : null,
+                ScaleMinLabel = pregunta.Type == QuestionType.Scale ? pregunta.ScaleMinLabel : null,
+                ScaleMaxLabel = pregunta.Type == QuestionType.Scale ? pregunta.ScaleMaxLabel : null,
                 Rows = pregunta.Type == QuestionType.Matrix
                     ? JsonSerializer.Serialize(pregunta.Rows.Select(texto => new { id = NewId(), text = texto }))
                     : null,
@@ -233,6 +238,9 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
                 TextCase = q.TextCase,
                 BackgroundImage = q.BackgroundImage,
                 ScaleMax = q.ScaleMax,
+                ScaleMin = q.ScaleMin,
+                ScaleMinLabel = q.ScaleMinLabel,
+                ScaleMaxLabel = q.ScaleMaxLabel,
                 Rows = [.. q.Rows.Select(r => r.Text)],
                 JumpTo = FormLogic.JumpToTemplate(q.JumpTo, ids),
                 Options = [.. q.Options.Select(o => o.Text)],
@@ -458,7 +466,10 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
             Position = SiguientePosicionPregunta(formId),
             Type = type,
             TextCase = QuestionTextCase.Normal,
-            ScaleMax = type == QuestionType.Rating ? QuestionType.DefaultScale : null,
+            ScaleMax = type == QuestionType.Rating ? QuestionType.DefaultScale
+                : type == QuestionType.Scale ? QuestionType.MaxScale
+                : null,
+            ScaleMin = type == QuestionType.Scale ? 0 : null,
         };
 
         if (type == QuestionType.YesNo)
@@ -519,6 +530,9 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
             Required = original.Required,
             TextCase = original.TextCase,
             ScaleMax = original.ScaleMax,
+            ScaleMin = original.ScaleMin,
+            ScaleMinLabel = original.ScaleMinLabel,
+            ScaleMaxLabel = original.ScaleMaxLabel,
             Rows = original.Rows,
             // Los saltos apuntan a preguntas del mismo formulario, asi que sirven
             // tal cual. Uno que ahora quede hacia atras se ignora al responder.
@@ -546,7 +560,8 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         return ToModel(copia);
     }
 
-    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax, List<MatrixRow>? rows = null)
+    public Question? UpdateQuestion(string formId, string questionId, string? title, string? description, bool? required, string? textCase, string? jumpTo, int? scaleMax, List<MatrixRow>? rows = null,
+        int? scaleMin = null, string? scaleMinLabel = null, string? scaleMaxLabel = null)
     {
         var fila = db.Questions
             .Include(q => q.Options.OrderBy(o => o.Position))
@@ -560,7 +575,13 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         if (textCase is not null) fila.TextCase = textCase;
         // Cadena vacia quita el salto; null no lo toca.
         if (jumpTo is not null) fila.JumpTo = jumpTo.Length == 0 ? null : jumpTo;
-        if (scaleMax.HasValue && fila.Type == QuestionType.Rating) fila.ScaleMax = scaleMax;
+        if (scaleMax.HasValue && QuestionType.HasScaleMax(fila.Type)) fila.ScaleMax = scaleMax;
+        if (fila.Type == QuestionType.Scale)
+        {
+            if (scaleMin.HasValue) fila.ScaleMin = scaleMin;
+            if (scaleMinLabel is not null) fila.ScaleMinLabel = scaleMinLabel;
+            if (scaleMaxLabel is not null) fila.ScaleMaxLabel = scaleMaxLabel;
+        }
         if (rows is not null && fila.Type == QuestionType.Matrix)
             fila.Rows = JsonSerializer.Serialize(rows.Select(r => new { id = r.Id, text = r.Text }));
 
@@ -978,6 +999,9 @@ public class SqlFormStore(IescoFormsDbContext db) : IFormStore
         BackgroundImage = fila.BackgroundImage,
         JumpTo = fila.JumpTo ?? string.Empty,
         ScaleMax = fila.ScaleMax,
+        ScaleMin = fila.ScaleMin,
+        ScaleMinLabel = fila.ScaleMinLabel ?? string.Empty,
+        ScaleMaxLabel = fila.ScaleMaxLabel ?? string.Empty,
         Rows = DeserializeRows(fila.Rows),
         Options = [.. fila.Options.OrderBy(o => o.Position)
             .Select(o => new QuestionOption { Id = o.Id, Text = o.Text, JumpTo = o.JumpTo ?? string.Empty })],

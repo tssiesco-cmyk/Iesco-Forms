@@ -12,10 +12,8 @@
  */
 
 import {
-  answerText, average, chartQuestion, isAnswered, isChartable, npsScore, TYPE_LABELS,
+  answerText, average, chartQuestion, isAnswered, isChartable, npsScore, NUMERIC_TYPES, TYPE_LABELS,
 } from "./questionTypes";
-
-const NUMERIC_TYPES = ["rating", "nps", "number"];
 
 /** Nombre de archivo sin caracteres que Windows no acepta. */
 function fileName(form, extension) {
@@ -130,7 +128,7 @@ function summaryRows(form, responses) {
       rows.push([title, type, "Respuestas", answered, null]);
     }
 
-    if (original.type === "rating" || original.type === "number" || original.type === "nps") {
+    if (NUMERIC_TYPES.includes(original.type)) {
       const avg = average(original, responses);
       if (avg !== null) rows.push(["", "", "Promedio", Math.round(avg * 100) / 100, null]);
     }

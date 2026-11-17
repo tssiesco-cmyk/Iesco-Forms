@@ -19,7 +19,7 @@ public static class SeedData
     ///
     /// Lazy y no un inicializador directo: los campos estaticos se inicializan
     /// en orden de declaracion, y las escalas que usan las plantillas
-    /// (Escala0A10, LineasDeServicio, Desempeno...) estan al final del
+    /// (LineasDeServicio, Desempeno...) estan al final del
     /// archivo. Construir aqui las dejaria en null.
     /// </summary>
     private static readonly Lazy<IReadOnlyList<Template>> _templates =
@@ -189,6 +189,8 @@ public static class SeedData
             Description = "Mide la satisfacción de tus clientes con el servicio, el equipo asignado y el cumplimiento de plazos.",
             Category = "Feedback",
             BackgroundImage = FondoSatisfaccion,
+            IntroBackgroundImage = FondoSatisfaccion,
+            BackgroundPerQuestion = true,
             CoverEnabled = true,
             CoverTitle = "Encuesta de satisfacción del cliente IESCO Group",
             CoverSubtitle = "¡Nos encantaría conocer su opinión sobre nuestra empresa!",
@@ -198,17 +200,39 @@ public static class SeedData
                 "Proyecto: P251140\n" +
                 "Servicio:\n" +
                 "Capacitación y certificación en operación segura de grúa articulada",
+            IntroFields =
+            [
+                new TemplateIntroField { Type = "name", Label = "Nombre completo", Placeholder = "Escribe tu nombre", Required = true, Enabled = true },
+                new TemplateIntroField { Type = "phone", Label = "Teléfono", Placeholder = "Ej: 0412-1234567", Required = false, Enabled = true },
+                new TemplateIntroField { Type = "email", Label = "Correo electrónico", Placeholder = "correo@ejemplo.com", Required = true, Enabled = true },
+            ],
             Questions =
             [
-                Choice("¿Qué tan satisfecho está con el servicio?", true, Escala0A10),
-                Choice("¿Cuál es su nivel de satisfacción con el equipo profesional asignado para el servicio?", true, Escala0A10),
-                YesNo("¿El servicio fue ejecutado dentro del plazo acordado?", true),
-                ShortText("¿Alguna recomendación para la mejora continua de nuestros servicios?", false),
-                ShortText("¿En qué otra línea de servicio de IESCO se encuentra interesado?", false),
-                ShortText("Nos gustaría mucho recibir cualquier comentario específico sobre nuestro servicio que podamos utilizar en el futuro como testimonios de nuestros clientes en nuestra página web o documentos comerciales (“what our customers say”).", false),
-                Choice("¿Cuál es la probabilidad que contrate nuevamente nuestros servicios?", true, "Muy probable", "Probable", "No estoy seguro", "Poco probable", "Nada probable"),
-                MultiChoice("¿En qué otra línea de servicio de IESCO se encuentra interesado?", false, LineasDeServicio),
-                ShortText("Agradecemos sinceramente tu dedicación al compartir tu tiempo con nosotros. Es posible que nos pongamos en contacto contigo para ampliar y profundizar en tus comentarios. Si deseas mantener una comunicación con nosotros en el futuro, por favor, déjanos tu información de contacto a continuación.", false),
+                ConFondo(Satisfaccion + "01-plataforma-marina.jpg",
+                    Scale("¿Qué tan satisfecho está con el servicio?", true, 0, 10, "Insatisfecho", "Muy Satisfecho")),
+                ConFondo(Satisfaccion + "02-camion-minero.jpg",
+                    Scale("¿Cuál es su nivel de satisfacción con el equipo profesional asignado para el servicio?", true, 0, 10, "Insatisfecho", "Muy Satisfecho")),
+                ConFondo(Satisfaccion + "03-bombas-atardecer.jpg",
+                    YesNo("¿El servicio fue ejecutado dentro del plazo acordado?", true)),
+                ConFondo(Satisfaccion + "04-ingeniero.jpg",
+                    ShortText("¿Alguna recomendación para la mejora continua de nuestros servicios?", false)),
+                ConFondo(Satisfaccion + "05-torres-atardecer.jpg",
+                    Dropdown("¿En qué otra línea de servicio de IESCO se encuentra interesado?", false,
+                        "GESTIÓN DE INTEGRIDAD DE ACTIVOS (AIM)",
+                        "GESTIÓN DE RIESGOS Y SEGURIDAD DE PROCESOS (PSM)",
+                        "INGENIERÍA AVANZADA (AE)",
+                        "SUPERVISIÓN DE PROYECTOS Y GESTIÓN DE LA CALIDAD EN PROYECTOS (PQM)",
+                        "Transformación Digital (TSS)")),
+                ConFondo(Satisfaccion + "06-refineria-pasto.jpg",
+                    LongText("Nos gustaría mucho recibir cualquier comentario específico sobre nuestro servicio que podamos utilizar en el futuro como testimonios de nuestros clientes en nuestra página web o documentos comerciales (“what our customers say”).", false,
+                        description: "Agradecemos de antemano su colaboración.")),
+                ConFondo(Satisfaccion + "07-tuberias.jpg",
+                    Scale("¿Cuál es la probabilidad que contrate nuevamente nuestros servicios?", true, 0, 4, "Poco Probable", "Muy probable")),
+                ConFondo(Satisfaccion + "08-cargador-camion.jpg",
+                    MultiChoice("¿En qué otra línea de servicio de IESCO se encuentra interesado?", false, LineasDeServicio)),
+                ConFondo(Satisfaccion + "09-esferas-gas.jpg",
+                    ShortText("Agradecemos sinceramente tu dedicación al compartir tu tiempo con nosotros. Es posible que nos pongamos en contacto contigo para ampliar y profundizar en tus comentarios. Si deseas mantener una comunicación con nosotros en el futuro, por favor, déjanos tu información de contacto a continuación.", false,
+                        description: "Agradecemos de antemano su colaboración.")),
             ],
         },
         new Template
@@ -513,7 +537,9 @@ public static class SeedData
     // borra el archivo que comparten todos los demas.
     //
     // Una imagen por plantilla, sin repetir, elegidas por lo que muestran.
-    private const string FondoSatisfaccion = "/AdobeStock_518323798.jpeg";
+    // La de satisfaccion lleva una foto por pregunta, en su propia carpeta.
+    private const string Satisfaccion = "/encuesta-satisfaccion/";
+    private const string FondoSatisfaccion = Satisfaccion + "00-portada-refineria-noche.jpg";
     private const string FondoNps = "/AdobeStock_2007793277.jpeg";          // bomba al atardecer
     private const string FondoEventoFeedback = "/AdobeStock_2080966257.jpeg"; // emergencia atendida
     private const string FondoContacto = "/AdobeStock_202041790.jpeg";      // refineria de noche
@@ -522,9 +548,6 @@ public static class SeedData
     private const string FondoQuiz = "/AdobeStock_2164906378.jpeg";         // incendio de tanques
     private const string FondoDesempeno = "/AdobeStock_137417730.jpeg";     // camion minero
     private const string FondoMercado = "/AdobeStock_377799248.jpeg";       // puerto con datos
-
-    // Escala 0-10 de la encuesta de satisfaccion: once opciones, estilo NPS.
-    private static readonly string[] Escala0A10 = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
 
     // Lineas de servicio de IESCO, en el orden que usa el area comercial.
     private static readonly string[] LineasDeServicio =
@@ -535,7 +558,7 @@ public static class SeedData
         "Gestión de Integridad de Activos (AIM)",
         "Ingeniería Avanzada (AE)",
         "Transformación Digital (TSS)",
-        "Otros",
+        "Otro",
     ];
 
     private static readonly string[] Acuerdo = ["Totalmente de acuerdo", "De acuerdo", "Ni de acuerdo ni en desacuerdo", "En desacuerdo", "Totalmente en desacuerdo"];
@@ -543,11 +566,24 @@ public static class SeedData
     private static readonly string[] Frecuencia = ["Diariamente", "Varias veces por semana", "Semanalmente", "Mensualmente", "Rara vez", "Nunca"];
     private static readonly string[] Desempeno = ["Supera expectativas", "Cumple expectativas", "Cumple parcialmente", "No cumple", "No aplica"];
 
-    private static TemplateQuestion ShortText(string title, bool required) =>
-        new() { Type = QuestionType.ShortText, Title = title, Required = required };
+    private static TemplateQuestion ShortText(string title, bool required, string description = "") =>
+        new() { Type = QuestionType.ShortText, Title = title, Required = required, Description = description };
 
-    private static TemplateQuestion LongText(string title, bool required) =>
-        new() { Type = QuestionType.LongText, Title = title, Required = required };
+    private static TemplateQuestion LongText(string title, bool required, string description = "") =>
+        new() { Type = QuestionType.LongText, Title = title, Required = required, Description = description };
+
+    private static TemplateQuestion ConFondo(string imagen, TemplateQuestion pregunta)
+    {
+        pregunta.BackgroundImage = imagen;
+        return pregunta;
+    }
+
+    private static TemplateQuestion Scale(string title, bool required, int min, int max, string minLabel, string maxLabel) =>
+        new()
+        {
+            Type = QuestionType.Scale, Title = title, Required = required,
+            ScaleMin = min, ScaleMax = max, ScaleMinLabel = minLabel, ScaleMaxLabel = maxLabel,
+        };
 
     private static TemplateQuestion Choice(string title, bool required, params string[] options) =>
         new() { Type = QuestionType.SingleChoice, Title = title, Required = required, Options = [.. options] };

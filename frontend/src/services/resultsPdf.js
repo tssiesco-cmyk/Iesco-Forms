@@ -16,6 +16,7 @@ import { CHART_COLORS } from "../styles/chartColors";
 import logoUrl from "../assets/logoiescogroup.png";
 import {
   TYPE_LABELS, answerText as sharedAnswerText, average, chartQuestion, isChartable, isSingleOption, npsScore,
+  NUMERIC_TYPES,
 } from "./questionTypes";
 
 const hex = (value) => [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
@@ -440,7 +441,7 @@ function renderFormContent(doc, autoTable, form, responses, logo) {
     const extras = [];
     const nps = question.type === "nps" ? npsScore(question, responses) : null;
     if (nps) extras.push(`NPS ${nps.score > 0 ? "+" : ""}${nps.score}`);
-    if (["rating", "nps", "number"].includes(question.type)) {
+    if (NUMERIC_TYPES.includes(question.type)) {
       const avg = average(question, responses);
       if (avg !== null) extras.push(`promedio ${avg.toLocaleString("es-ES", { maximumFractionDigits: 2 })}`);
     }

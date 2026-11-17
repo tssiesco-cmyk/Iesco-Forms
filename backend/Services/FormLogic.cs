@@ -118,6 +118,13 @@ public static class FormLogic
                     ? null
                     : "la puntuacion debe ir de 0 a 10";
 
+            case QuestionType.Scale:
+                var desde = question.ScaleMin ?? 0;
+                var hasta = question.ScaleMax ?? QuestionType.MaxScale;
+                return int.TryParse(texto, out var punto) && punto >= desde && punto <= hasta
+                    ? null
+                    : $"la puntuacion debe ir de {desde} a {hasta}";
+
             case QuestionType.Number:
                 // Sin separador de miles: "1,5" no puede convertirse en 15. El
                 // navegador ya manda la coma decimal como punto.

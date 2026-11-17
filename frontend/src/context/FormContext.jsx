@@ -13,7 +13,7 @@ const FormContext = createContext();
 const TYPING_DELAY = 600;
 
 /** Cambios de una pregunta que se eligen de una vez y se guardan al momento. */
-const INSTANT_QUESTION_KEYS = ["required", "textCase", "jumpTo", "scaleMax"];
+const INSTANT_QUESTION_KEYS = ["required", "textCase", "jumpTo", "scaleMax", "scaleMin"];
 
 export function FormProvider({ children }) {
   const toast = useToast();

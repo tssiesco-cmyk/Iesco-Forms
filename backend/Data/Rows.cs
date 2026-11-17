@@ -94,8 +94,14 @@ public class QuestionRow
     /// <summary>Salto al terminar la pregunta: NULL, 'end' o el id de otra pregunta.</summary>
     public string? JumpTo { get; set; }
 
-    /// <summary>Estrellas de las preguntas rating. NULL en los demas tipos.</summary>
+    /// <summary>Estrellas de las preguntas rating o tope de una escala. NULL en los demas tipos.</summary>
     public int? ScaleMax { get; set; }
+
+    /// <summary>Inicio de una escala (0 o 1). NULL en los demas tipos.</summary>
+    public int? ScaleMin { get; set; }
+
+    public string? ScaleMinLabel { get; set; }
+    public string? ScaleMaxLabel { get; set; }
 
     /// <summary>Filas de una pregunta matrix, serializadas como JSON. NULL en otros tipos.</summary>
     public string? Rows { get; set; }

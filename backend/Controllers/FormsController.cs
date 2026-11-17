@@ -296,7 +296,8 @@ public class FormsController(
 
         var matrixRows = request.Rows?.Select(r => new MatrixRow { Id = r.Id, Text = r.Text }).ToList();
         var question = store.UpdateQuestion(id, questionId, request.Title, request.Description, request.Required,
-            request.TextCase, request.JumpTo, request.ScaleMax, matrixRows);
+            request.TextCase, request.JumpTo, request.ScaleMax, matrixRows,
+            request.ScaleMin, request.ScaleMinLabel, request.ScaleMaxLabel);
         if (question is null) return QuestionNotFound(id, questionId);
 
         Notify(form, NotificationType.FormUpdated);

@@ -50,7 +50,10 @@ public record UpdateQuestionRequest(
     string? TextCase,
     [MaxLength(36)] string? JumpTo,
     [Range(QuestionType.MinScale, QuestionType.MaxScale)] int? ScaleMax,
-    List<MatrixRowRequest>? Rows);
+    List<MatrixRowRequest>? Rows,
+    [Range(0, 1)] int? ScaleMin = null,
+    [MaxLength(100)] string? ScaleMinLabel = null,
+    [MaxLength(100)] string? ScaleMaxLabel = null);
 
 public record ReorderQuestionsRequest(int FromIndex, int ToIndex);
 

@@ -68,9 +68,15 @@ public static class QuestionType
     /// </summary>
     public const string Matrix = "matrix";
 
+    /// <summary>
+    /// Botones numerados de <see cref="Question.ScaleMin"/> a <see cref="Question.ScaleMax"/>,
+    /// con un texto en cada extremo. Se guarda como texto, igual que NPS.
+    /// </summary>
+    public const string Scale = "scale";
+
     public static bool IsValid(string? type) =>
         type is ShortText or LongText or SingleChoice or MultipleChoice
-            or Dropdown or YesNo or Rating or Nps or Number or Date or Matrix;
+            or Dropdown or YesNo or Rating or Nps or Number or Date or Matrix or Scale;
 
     public static bool HasOptions(string type) =>
         type is SingleChoice or MultipleChoice or Dropdown or YesNo;
@@ -90,6 +96,9 @@ public static class QuestionType
     public const int MinScale = 3;
     public const int MaxScale = 10;
     public const int DefaultScale = 5;
+
+    /// <summary>Si la pregunta usa ScaleMax: estrellas o escala.</summary>
+    public static bool HasScaleMax(string type) => type is Rating or Scale;
 }
 
 /// <summary>
@@ -260,8 +269,15 @@ public class Question
     /// </summary>
     public string JumpTo { get; set; } = string.Empty;
 
-    /// <summary>Cuantas estrellas tiene una pregunta de tipo rating. Null en los demas tipos.</summary>
+    /// <summary>Estrellas de una rating o valor mas alto de una escala. Null en los demas tipos.</summary>
     public int? ScaleMax { get; set; }
+
+    /// <summary>Valor mas bajo de una escala: 0 o 1. Null en los demas tipos.</summary>
+    public int? ScaleMin { get; set; }
+
+    /// <summary>Textos de los extremos de una escala ("Insatisfecho" / "Muy satisfecho").</summary>
+    public string ScaleMinLabel { get; set; } = string.Empty;
+    public string ScaleMaxLabel { get; set; } = string.Empty;
 
     /// <summary>Filas (criterios) de una pregunta de tipo matrix. Vacio en los demas tipos.</summary>
     public List<MatrixRow> Rows { get; set; } = [];

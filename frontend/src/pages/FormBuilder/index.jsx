@@ -7,11 +7,11 @@ import {
   FiEye, FiX, FiBarChart2, FiUser, FiToggleLeft, FiToggleRight, FiMail, FiPhone,
   FiSend, FiRotateCcw, FiCheck, FiAlertCircle, FiImage, FiUpload,
   FiCopy, FiChevronsLeft, FiChevronsRight, FiShare2, FiLayout, FiClock, FiBookmark,
-  FiList, FiThumbsUp, FiStar, FiTrendingUp, FiHash, FiCalendar, FiGitBranch, FiCornerDownRight, FiGrid
+  FiList, FiThumbsUp, FiStar, FiTrendingUp, FiHash, FiCalendar, FiGitBranch, FiCornerDownRight, FiGrid, FiSliders
 } from "react-icons/fi";
 import {
   TYPE_LABELS, TEXT_TYPES, JUMP_END, SCALE_CHOICES, DEFAULT_SCALE,
-  hasOptions, hasEditableOptions, isSingleOption,
+  hasOptions, hasEditableOptions, isSingleOption, scaleValues,
 } from "../../services/questionTypes";
 import { useForms } from "../../context/FormContext";
 import Button from "../../components/atoms/Button";
@@ -1008,6 +1008,7 @@ const typeIcons = {
   number: <FiHash size={14} />,
   date: <FiCalendar size={14} />,
   matrix: <FiGrid size={14} />,
+  scale: <FiSliders size={14} />,
 };
 
 /** Botones de "Agregar pregunta", con el nombre corto que cabe en la cuadricula. */
@@ -1023,6 +1024,7 @@ const addButtons = [
   { type: "number", label: "Numero" },
   { type: "date", label: "Fecha" },
   { type: "matrix", label: "Matriz" },
+  { type: "scale", label: "Escala" },
 ];
 
 /**
@@ -1786,6 +1788,53 @@ function FormBuilder() {
                   <ScalePreview aria-hidden="true">
                     {Array.from({ length: 11 }, (_, i) => <ScaleBox key={i}>{i}</ScaleBox>)}
                   </ScalePreview>
+                )}
+
+                {activeQuestion.type === "scale" && (
+                  <>
+                    <ScaleSetting>
+                      Desde
+                      <JumpSelectBox
+                        value={activeQuestion.scaleMin ?? 0}
+                        onChange={(e) =>
+                          updateQuestion(id, activeQuestion.id, { scaleMin: Number(e.target.value) })
+                        }
+                      >
+                        <option value={0}>0</option>
+                        <option value={1}>1</option>
+                      </JumpSelectBox>
+                      hasta
+                      <JumpSelectBox
+                        value={activeQuestion.scaleMax ?? 10}
+                        onChange={(e) =>
+                          updateQuestion(id, activeQuestion.id, { scaleMax: Number(e.target.value) })
+                        }
+                      >
+                        {SCALE_CHOICES.map((n) => <option key={n} value={n}>{n}</option>)}
+                      </JumpSelectBox>
+                    </ScaleSetting>
+                    <ScalePreview aria-hidden="true">
+                      {scaleValues(activeQuestion).map((n) => <ScaleBox key={n}>{n}</ScaleBox>)}
+                    </ScalePreview>
+                    <OptionsList>
+                      <OptionInput
+                        value={activeQuestion.scaleMinLabel || ""}
+                        onChange={(e) =>
+                          updateQuestion(id, activeQuestion.id, { scaleMinLabel: e.target.value })
+                        }
+                        placeholder={`Texto para ${activeQuestion.scaleMin ?? 0} (ej: Insatisfecho)`}
+                        maxLength={100}
+                      />
+                      <OptionInput
+                        value={activeQuestion.scaleMaxLabel || ""}
+                        onChange={(e) =>
+                          updateQuestion(id, activeQuestion.id, { scaleMaxLabel: e.target.value })
+                        }
+                        placeholder={`Texto para ${activeQuestion.scaleMax ?? 10} (ej: Muy satisfecho)`}
+                        maxLength={100}
+                      />
+                    </OptionsList>
+                  </>
                 )}
 
                 {activeQuestion.type === "number" && (
